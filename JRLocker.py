@@ -1,15 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
-# Jackrabbit Relay
+# Jackrabbit DLM
 # 2021 Copyright © Robert APM Darin
 # All rights reserved unconditionally.
 
 import sys
 sys.path.append('/home/JackrabbitDLM')
 import os
-import signal
-import psutil
 import datetime
 import time
 import random
@@ -111,10 +109,10 @@ class Locker:
                             s='status'
                         buf=bData[s]
                     except:
-                        pass
-                    if casefold==True:
+                        buf=None
+                    if casefold==True and buf!=None:
                         buf=buf.lower()
-                    if buf in self.ulResp:
+                    if buf!=None and buf in self.ulResp:
                         done=True
                     else:
                         time.sleep(self.retrysleep)

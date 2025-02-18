@@ -1,5 +1,12 @@
 #!/bin/bash
 
+# $1 is the number of fighters that will be spawned simultaneously
+
+# $2 is the counter max. The fighters will run until the counter is >= this number
+
+# $3 can be anything. If present, the program will NOT use the library retry method,
+# but aggressively "fight it out".
+
 N=0
 while [ $N -lt $1 ] ; do
     let N=N+1

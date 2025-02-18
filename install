@@ -1,0 +1,22 @@
+#!/bin/bash
+
+# Make sure virtual environment is active
+
+if [ -d "/home/RAPMD" ] ; then
+    source /home/RAPMD/bin/activate
+fi
+
+pip3=`which pip3`
+if [ "x$pip3" == "x" ] ; then
+    echo PIP3 not installed. Please install it first, then re-run this script.
+    exit 1
+fi
+
+BaseDir="/home/JackrabbitDLM"
+
+cd /home/GitHub/JackrabbitDLM
+
+mkdir -p $BaseDir > /dev/null 2>&1
+mkdir -p $BaseDir/Logs > /dev/null 2>&1
+git pull https://github.com/rapmd73/JackrabbitDLM
+cp * /home/JackrabbitDLM > /dev/null 2>&1
