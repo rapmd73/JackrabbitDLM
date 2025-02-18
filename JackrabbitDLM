@@ -1,0 +1,298 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+#
+# Jackrabbit Locker
+# 2021 Copyright © Robert APM Darin
+# All rights reserved unconditionally.
+
+# For (un)locking
+
+# { "ID":"DEADBWEEF", "FileName":"testData", "Action":"Lock", "Expire":"300" }
+# { "ID":"DEADBWEEF", "FileName":"testData", "Action":"Unlock" }
+
+# For memory reference
+
+# { "ID":"DEADBWEEF", "FileName":"testData", "Action":"Get" }
+# { "ID":"DEADBWEEF", "FileName":"testData", "Action":"Put", "Expire":"300","DataStore":"Blah" }
+# { "ID":"DEADBWEEF", "FileName":"testData", "Action":"Erase" }
+
+import sys
+sys.path.append('/home/JackrabbitDLM')
+import os
+import gc
+import time
+from datetime import datetime
+import socket
+import select
+import json
+
+Version="0.0.0.0.100"
+BaseDirectory='/home/JackrabbitDLM'
+LogDirectory="/home/JackrabbitDLM/Logs"
+
+# Required global for the process to work
+
+Locker={}
+
+# Write pid in port file
+
+def WritePID(port):
+    fn=BaseDirectory+'/'+str(port)+'.pid'
+    f = open(fn, "w")
+    f.write(str(os.getpid()))
+    f.close()
+
+# Write log entry
+
+def WriteLog(addr,msg):
+    time=(datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f'))
+
+    s=f'{time} {addr:16} {msg}\n'
+
+    fh=open(LogDirectory+'/JackrabbitDLM.log','a')
+    fh.write(s)
+    fh.close()
+    print(s.strip())
+
+# Convience to build the status and a json payload
+
+def jsonStatus(str,id=None,Tag=None,Data=None):
+    res={}
+    res['Status']=str
+
+    if id!=None:
+        res['ID']=id
+
+    if Tag!=None and Data!=None:
+        res[Tag]=Data
+
+    return json.dumps(res)+'\n'
+
+# Process the payload and carry out each of the desired functionalities.
+#
+# Lock and DataStore MUST be different. Unlock REMOVES data is the same.
+
+def ProcessPayload(data):
+    global Locker
+
+    try:
+        dataDB=json.loads(data)
+    except: # damaged payload
+        return jsonStatus("BadPayload")
+    else: # Find the lock
+
+        # FileName and Action are required. For memory fetches, FileName is memory ID.
+
+        if 'FileName' not in dataDB \
+        or 'Action' not in dataDB \
+        or 'ID' not in dataDB \
+        or 'Expire' not in dataDB:
+            return jsonStatus("BadPayload")
+
+        # Valid actions:
+        #    Lock
+        #    Unlock
+        #    Get
+        #    Put
+        #    Erase
+
+        # What are we doing. FileName also doubles as memory ID
+        FileName=dataDB['FileName']
+        action=dataDB['Action'].lower()
+
+        # Handle the LOCK action. This allows an advisory locking method that should
+        # work on any platform. Locking/Unlocking can be used as a rate limiter as
+        # well.
+
+        if action=='lock':
+            # New lock request
+            if FileName not in Locker:
+                dataLock={}
+                dataLock['ID']=dataDB['ID']
+                dataLock['Expire']=time.time()+float(dataDB['Expire'])
+                Locker[FileName]=dataLock
+                return jsonStatus("Locked",Locker[FileName]['ID'])
+            # Lock has expired, now unlocked
+            elif time.time()>Locker[FileName]['Expire']:
+                Locker[FileName]['ID']=dataDB['ID'] # assign the new ID
+                Locker[FileName]['Expire']=time.time()+float(dataDB['Expire'])
+                return jsonStatus("Locked",Locker[FileName]['ID'])
+            # The current owner want the lock reset to a specific duration/held longer
+            elif Locker[FileName]['ID']==dataDB['ID']:
+                Locker[FileName]['Expire']=time.time()+float(dataDB['Expire'])
+                return jsonStatus("Locked",Locker[FileName]['ID'])
+            # Lock access by a non-owner ID
+            else:
+                return jsonStatus("NotOwner")
+        # Unlock request
+        elif action=='unlock':
+            # Just pass through unlock
+            if FileName not in Locker:
+                return jsonStatus("Unlocked")
+            # Verify owner and unlock
+            elif Locker[FileName]['ID']==dataDB['ID']:
+                Locker[FileName]['Expire']=0
+                return jsonStatus("Unlocked",Locker[FileName]['ID'])
+            # Unock access by a non-owner ID. This may seem idiotic, but its an
+            # absolute for keeping the lock from being hijacked.
+            else:
+                return jsonStatus("NotOwner")
+        # Get memory reference
+        elif action=='get':
+            # Memory item doesn't exist
+            if FileName not in Locker:
+                return jsonStatus("NotFound")
+            # Verify owner and unlock/Erase memory
+            elif Locker[FileName]['ID']==dataDB['ID']:
+                if 'DataStore' in Locker[FileName]:
+                    return jsonStatus("Done",Locker[FileName]['ID'],Tag="DataStore",Data=Locker[FileName]['DataStore'])
+                else:
+                    return jsonStatus("NoData",Locker[FileName]['ID'])
+            # Not the rightful owner
+            else:
+                return jsonStatus("NotOwner")
+        elif action=='put':
+            # New memory object
+            if FileName not in Locker:
+                dStore={}
+                dStore['ID']=dataDB['ID']
+                dStore['Expire']=time.time()+float(dataDB['Expire'])
+                dStore['DataStore']=dataDB['DataStore']
+                Locker[FileName]=dStore
+                return jsonStatus("Done",Locker[FileName]['ID'])
+            # Existing memory object, verify owner and reset expiration timeout
+            elif Locker[FileName]['ID']==dataDB['ID']:
+                Locker[FileName]['Expire']=time.time()+float(dataDB['Expire'])
+                Locker[FileName]['DataStore']=dataDB['DataStore']
+                return jsonStatus("Done",Locker[FileName]['ID'])
+            # Not the rightful owner
+            else:
+                return jsonStatus("NotOwner")
+        # Erase request
+        elif action=='erase':
+            # Just pass through erase
+            if FileName not in Locker:
+                return jsonStatus("NotFound")
+            # Verify owner and erase memory. Erase is just resetting expiration to 0.
+            # Will be remove in main function.
+            elif Locker[FileName]['ID']==dataDB['ID']:
+                Locker[FileName]['Expire']=0
+                Locker[FileName]['DataStore']=None
+                return jsonStatus("Done",Locker[FileName]['ID'])
+            # Not the rightful owner
+            else:
+                return jsonStatus("NotOwner")
+        # Wrong key
+        else:
+            return jsonStatus("BadAction")
+
+###
+### Main Driver
+###
+
+def main():
+    global Locker
+
+    WriteLog(Version,f"Jackrabbit DLM {Version}")
+
+    host=''
+    port=37373
+
+    if len(sys.argv)>1:
+        host=sys.argv[1]
+    if len(sys.argv)>2:
+        port=int(sys.argv[2])
+
+    # Data storage for incoming payloads
+    dataStore={}
+
+    WritePID(port)
+
+    # Open the port.
+
+    try:
+        lockerSocket=socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        lockerSocket.setblocking(0)
+        lockerSocket.bind((host, port))
+        lockerSocket.listen(1024)
+    except OSError as err:
+        x=str(err)
+        if x.find('Address already in use')>-1:
+            x='Another program is using this port: '+str(port)
+        WriteLog(Version,x)
+        sys.exit(1)
+
+    # Track incoming connections
+
+    inputs=[lockerSocket]
+
+    # Response queue connected to each client
+
+    queue={}
+
+    # The main loop of the program.
+
+    while True:
+        infds,outfds,errfds=select.select(inputs, inputs, [], 30)
+
+        if len(infds)!=0:
+            for fds in infds:
+                if fds is lockerSocket:
+                    # Get new connection
+                    clientsock,clientaddr=fds.accept()
+                    clientsock.setblocking(0)
+                    if clientsock not in inputs:
+                        inputs.append(clientsock)
+                    dataStore[clientsock]=''
+                else:
+                    data=None
+                    try:
+                        data=fds.recv(1024)
+                    except:
+                        # Sleep based upon server load
+                        time.sleep(1)
+
+                    # No data received, close connection, clean up and sleep
+
+                    if not data or data==None:
+                        if fds in dataStore:
+                            dataStore.pop(fds,None)
+                        if fds in inputs:
+                            inputs.remove(fds)
+                        if fds in queue:
+                            queue.pop(fds,None)
+                        fds.close()
+                    else:
+                        # Collect the entire line.
+                        data=data.decode()
+                        dataStore[fds]+=data
+                        if data[-1]=='\n':
+                            queue[fds]=ProcessPayload(dataStore[fds])
+
+        # Send response and close connection
+
+        if len(outfds)!=0:
+            for fds in outfds:
+                if fds in queue:
+                    try:
+                        fds.sendall(queue[fds].encode())
+                    except:
+                        if fds in dataStore:
+                            dataStore.pop(fds,None)
+                        if fds in inputs:
+                            inputs.remove(fds)
+                        fds.close()
+                    queue.pop(fds,None)
+
+        # Clean up memory list
+
+        now=time.time()
+        for k in list(Locker):
+            if now>Locker[k]['Expire']:
+                Locker.pop(k,None)
+
+        # Long term memory management
+        gc.collect()
+
+if __name__ == '__main__':
+    main()

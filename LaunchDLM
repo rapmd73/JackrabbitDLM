@@ -1,0 +1,19 @@
+#!/bin/bash
+
+# Crontab entry ( without has mark #
+# @reboot ( /home/JackrabbitDLM/LaunchDLM & ) > /dev/null 2>&1
+
+if [ -d "/home/RAPMD" ] ; then
+    source /home/RAPMD/bin/activate
+fi
+
+BaseDir="/home/JackrabbitDLM"
+
+cd $BaseDir
+
+while true ; do
+    $BaseDir/JackrabbitDLM
+    sleep 60
+done
+
+

@@ -1,0 +1,7 @@
+#!/bin/bash
+
+N=0
+while [ $N -lt $1 ] ; do
+    let N=N+1
+    ( ./LockFighter $2 $3 & )
+done

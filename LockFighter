@@ -1,0 +1,80 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+#
+# Jackrabbit Relay
+# 2021 Copyright © Robert APM Darin
+# All rights reserved unconditionally.
+
+import sys
+sys.path.append('/home/GitHub/JackrabbitDLM')
+import os
+import time
+import json
+import random
+
+import JRLocker as JRL
+
+m=1000
+if len(sys.argv)>1:
+    m=int(sys.argv[1])
+
+RetryLocker=True
+if len(sys.argv)>2:
+    RetryLocker=False
+
+c=0     # Memory counter
+f=0     # Failed locks
+s=0     # Successful locks
+r=0     # Reads
+w=0     # Writes
+
+# Connection timeout is 10 seconds
+fw1=JRL.Locker("LockerTest",Timeout=10,Retry=0)
+Memory=JRL.Locker('LockFighter',ID='LockFighterMemory')
+
+stime=time.time()
+while c<m:
+    rl=None
+    if RetryLocker:
+        rl=fw1.Lock(expire=10)       # Retry framework
+    else:
+        rl=fw1.IsLocked(expire=10)   # Hyper aggressive, no retry
+
+    if rl=='locked':
+        try:
+            # Consume
+            sData=json.loads(Memory.Get())
+            r+=1
+            # If found, increment
+            if 'DataStore' in sData:
+                c=int(sData['DataStore'])
+
+                # Write (produce) 25% of the time
+                rn=random.random()
+                if c<m and rn>0.75:
+                    c+=1
+                    Memory.Put(data=str(c),expire=10)
+                    w+=1
+            # If not found, create it
+            else:
+                Memory.Put(data=str(c),expire=10)
+                w+=1
+            s+=1
+        except Exception as err:
+            f+=1
+            print(err)
+            time.sleep(0.1)
+        fw1.Unlock()
+    else:
+        f+=1
+        time.sleep(0.1)
+
+# A proper program would use some kind of a waiting period to play nice with the CPU.
+#    time.sleep(0.1)
+
+etime=time.time()
+# contention rate
+cr=0
+if f>0:
+    cr=round((f/(s+f))*100,2)
+print(str(RetryLocker)[0],os.getpid(),etime-stime,f,s,r,w,cr,c)
