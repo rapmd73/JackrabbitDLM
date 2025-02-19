@@ -26,6 +26,7 @@ import json
 class Locker:
     # Initialize the file name
     def __init__(self,filename,Retry=7,RetrySleep=0.1,Timeout=300,ID=None,Host='',Port=37373):
+        self.Version="0.0.0.0.105"
         self.ulResp=['badpayload','locked','unlocked','notowner','notfound']
 
         if ID==None:

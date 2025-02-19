@@ -26,9 +26,13 @@ import socket
 import select
 import json
 
-Version="0.0.0.0.100"
+Version="0.0.0.0.125"
 BaseDirectory='/home/JackrabbitDLM'
 LogDirectory="/home/JackrabbitDLM/Logs"
+
+# Statistics
+
+Statistics={}
 
 # Required global for the process to work
 
@@ -37,17 +41,17 @@ Locker={}
 # Write pid in port file
 
 def WritePID(port):
-    fn=BaseDirectory+'/'+str(port)+'.pid'
+    fn=LogDirectory+'/'+str(port)+'.pid'
     f = open(fn, "w")
     f.write(str(os.getpid()))
     f.close()
 
 # Write log entry
 
-def WriteLog(addr,msg):
+def WriteLog(msg):
     time=(datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f'))
 
-    s=f'{time} {addr:16} {msg}\n'
+    s=f'{time} {msg}\n'
 
     fh=open(LogDirectory+'/JackrabbitDLM.log','a')
     fh.write(s)
@@ -73,11 +77,13 @@ def jsonStatus(str,id=None,Tag=None,Data=None):
 # Lock and DataStore MUST be different. Unlock REMOVES data is the same.
 
 def ProcessPayload(data):
+    global Statistics
     global Locker
 
     try:
         dataDB=json.loads(data)
     except: # damaged payload
+        Statistics['BadPayload']=Statistics.get('BadPayload',0)+1
         return jsonStatus("BadPayload")
     else: # Find the lock
 
@@ -87,6 +93,7 @@ def ProcessPayload(data):
         or 'Action' not in dataDB \
         or 'ID' not in dataDB \
         or 'Expire' not in dataDB:
+            Statistics['BadPayload']=Statistics.get('BadPayload',0)+1
             return jsonStatus("BadPayload")
 
         # Valid actions:
@@ -111,45 +118,58 @@ def ProcessPayload(data):
                 dataLock['ID']=dataDB['ID']
                 dataLock['Expire']=time.time()+float(dataDB['Expire'])
                 Locker[FileName]=dataLock
+                Statistics['Lock']=Statistics.get('Lock',0)+1
                 return jsonStatus("Locked",Locker[FileName]['ID'])
             # Lock has expired, now unlocked
             elif time.time()>Locker[FileName]['Expire']:
                 Locker[FileName]['ID']=dataDB['ID'] # assign the new ID
                 Locker[FileName]['Expire']=time.time()+float(dataDB['Expire'])
+                Statistics['Expired']=Statistics.get('Expired',0)+1
+                Statistics['Lock']=Statistics.get('Lock',0)+1
                 return jsonStatus("Locked",Locker[FileName]['ID'])
             # The current owner want the lock reset to a specific duration/held longer
             elif Locker[FileName]['ID']==dataDB['ID']:
                 Locker[FileName]['Expire']=time.time()+float(dataDB['Expire'])
+                Statistics['Lock']=Statistics.get('Lock',0)+1
                 return jsonStatus("Locked",Locker[FileName]['ID'])
             # Lock access by a non-owner ID
             else:
+                Statistics['NotOwner']=Statistics.get('NotOwner',0)+1
                 return jsonStatus("NotOwner")
         # Unlock request
         elif action=='unlock':
             # Just pass through unlock
             if FileName not in Locker:
+                Statistics['Unlock']=Statistics.get('Unlock',0)+1
                 return jsonStatus("Unlocked")
             # Verify owner and unlock
             elif Locker[FileName]['ID']==dataDB['ID']:
+                if Locker[FileName]['Expire']>0:
+                    Statistics['Unlock']=Statistics.get('Unlock',0)+1
                 Locker[FileName]['Expire']=0
                 return jsonStatus("Unlocked",Locker[FileName]['ID'])
             # Unock access by a non-owner ID. This may seem idiotic, but its an
             # absolute for keeping the lock from being hijacked.
             else:
+                Statistics['NotOwner']=Statistics.get('NotOwner',0)+1
                 return jsonStatus("NotOwner")
         # Get memory reference
         elif action=='get':
             # Memory item doesn't exist
             if FileName not in Locker:
+                Statistics['GetNF']=Statistics.get('GetNF',0)+1
                 return jsonStatus("NotFound")
-            # Verify owner and unlock/Erase memory
+            # Verify owner of data
             elif Locker[FileName]['ID']==dataDB['ID']:
                 if 'DataStore' in Locker[FileName]:
+                    Statistics['Get']=Statistics.get('Get',0)+1
                     return jsonStatus("Done",Locker[FileName]['ID'],Tag="DataStore",Data=Locker[FileName]['DataStore'])
                 else:
+                    Statistics['GetNF']=Statistics.get('GetNF',0)+1
                     return jsonStatus("NoData",Locker[FileName]['ID'])
             # Not the rightful owner
             else:
+                Statistics['NotOwner']=Statistics.get('NotOwner',0)+1
                 return jsonStatus("NotOwner")
         elif action=='put':
             # New memory object
@@ -159,31 +179,38 @@ def ProcessPayload(data):
                 dStore['Expire']=time.time()+float(dataDB['Expire'])
                 dStore['DataStore']=dataDB['DataStore']
                 Locker[FileName]=dStore
+                Statistics['PutNew']=Statistics.get('PutNew',0)+1
                 return jsonStatus("Done",Locker[FileName]['ID'])
             # Existing memory object, verify owner and reset expiration timeout
             elif Locker[FileName]['ID']==dataDB['ID']:
                 Locker[FileName]['Expire']=time.time()+float(dataDB['Expire'])
                 Locker[FileName]['DataStore']=dataDB['DataStore']
+                Statistics['PutUpdate']=Statistics.get('PutUpdate',0)+1
                 return jsonStatus("Done",Locker[FileName]['ID'])
             # Not the rightful owner
             else:
+                Statistics['NotOwner']=Statistics.get('NotOwner',0)+1
                 return jsonStatus("NotOwner")
         # Erase request
         elif action=='erase':
             # Just pass through erase
             if FileName not in Locker:
+                Statistics['EraseNF']=Statistics.get('EraseNF',0)+1
                 return jsonStatus("NotFound")
             # Verify owner and erase memory. Erase is just resetting expiration to 0.
             # Will be remove in main function.
             elif Locker[FileName]['ID']==dataDB['ID']:
                 Locker[FileName]['Expire']=0
                 Locker[FileName]['DataStore']=None
+                Statistics['Erased']=Statistics.get('Erased',0)+1
                 return jsonStatus("Done",Locker[FileName]['ID'])
             # Not the rightful owner
             else:
+                Statistics['NotOwner']=Statistics.get('NotOwner',0)+1
                 return jsonStatus("NotOwner")
         # Wrong key
         else:
+            Statistics['BadAction']=Statistics.get('BadAction',0)+1
             return jsonStatus("BadAction")
 
 ###
@@ -191,9 +218,12 @@ def ProcessPayload(data):
 ###
 
 def main():
+    global Statistics
     global Locker
 
-    WriteLog(Version,f"Jackrabbit DLM {Version}")
+    OldHour=-1
+
+    WriteLog(f"Jackrabbit DLM {Version}")
 
     host=''
     port=37373
@@ -219,7 +249,7 @@ def main():
         x=str(err)
         if x.find('Address already in use')>-1:
             x='Another program is using this port: '+str(port)
-        WriteLog(Version,x)
+        WriteLog(x)
         sys.exit(1)
 
     # Track incoming connections
@@ -236,7 +266,10 @@ def main():
         infds,outfds,errfds=select.select(inputs, inputs, [], 30)
 
         if len(infds)!=0:
+            Statistics['AIn']=len(infds)
             for fds in infds:
+                # Inbound requests processed
+                Statistics['In']=Statistics.get('In',0)+1
                 if fds is lockerSocket:
                     # Get new connection
                     clientsock,clientaddr=fds.accept()
@@ -272,7 +305,10 @@ def main():
         # Send response and close connection
 
         if len(outfds)!=0:
+            Statistics['AOut']=len(outfds)
             for fds in outfds:
+                # Outbound requests processed
+                Statistics['Out']=Statistics.get('Out',0)+1
                 if fds in queue:
                     try:
                         fds.sendall(queue[fds].encode())
@@ -286,10 +322,33 @@ def main():
 
         # Clean up memory list
 
+        # Active Locks/Data
+        Statistics['ALock']=0
+        Statistics['AData']=0
+
         now=time.time()
         for k in list(Locker):
             if now>Locker[k]['Expire']:
+                if Locker[k]['Expire']>0:
+                    Statistics['ExpiredData']=Statistics.get('ExpiredData',0)+1
+                else:
+                    if Locker[k]['Expire']>0:
+                        Statistics['ExpiredLock']=Statistics.get('ExpiredLocked',0)+1
                 Locker.pop(k,None)
+            # For accuracy, must be after possible removal
+            if k in Locker:
+                if 'DataStore' in Locker[k]:
+                    Statistics['AData']+=1 #=Statistics.get('AData',0)+1
+                else:
+                    Statistics['ALock']+=1 #=Statistics.get('ALock',0)+1
+
+        ct=datetime.now()
+        if ct.hour!=OldHour and len(Statistics)>0:
+            OldHour=ct.hour
+
+            s=', '.join(f"{k}: {v}" for k,v in sorted(Statistics.items()) if v>0)
+            WriteLog(s)
+            Statistics={}
 
         # Long term memory management
         gc.collect()
