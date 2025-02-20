@@ -26,7 +26,7 @@ import socket
 import select
 import json
 
-Version="0.0.0.0.125"
+Version="0.0.0.0.130"
 BaseDirectory='/home/JackrabbitDLM'
 LogDirectory="/home/JackrabbitDLM/Logs"
 
@@ -140,7 +140,7 @@ def ProcessPayload(data):
         elif action=='unlock':
             # Just pass through unlock
             if FileName not in Locker:
-                Statistics['Unlock']=Statistics.get('Unlock',0)+1
+                Statistics['UnlockNF']=Statistics.get('UnlockNF',0)+1
                 return jsonStatus("Unlocked")
             # Verify owner and unlock
             elif Locker[FileName]['ID']==dataDB['ID']:
