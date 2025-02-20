@@ -21,12 +21,12 @@ import json
 # ( do somwething )
 # fw.Unlock()
 
-# { "ID":"DEADBWEEF", "FileName":"testData", "Action":"Lock", "Expire":"300" }
+# { "ID":"DEADBEEF", "FileName":"testData", "Action":"Lock", "Expire":"300" }
 
 class Locker:
     # Initialize the file name
-    def __init__(self,filename,Retry=7,RetrySleep=0.1,Timeout=300,ID=None,Host='',Port=37373):
-        self.Version="0.0.0.0.105"
+    def __init__(self,filename,Retry=7,RetrySleep=1,Timeout=300,ID=None,Host='',Port=37373):
+        self.Version="0.0.0.0.130"
         self.ulResp=['badpayload','locked','unlocked','notowner','notfound']
 
         if ID==None:
@@ -50,7 +50,7 @@ class Locker:
         oc=""
 
         random.seed(time.time())
-        for i in range(37):
+        for i in range(random.randrange(37,73)):
             done=False
             while not done:
                 for z in range(random.randrange(73,237)):
