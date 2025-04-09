@@ -56,7 +56,6 @@ def WriteLog(msg):
     fh=open(LogDirectory+'/JackrabbitDLM.log','a')
     fh.write(s)
     fh.close()
-    print(s.strip())
 
 # Convience to build the status and a json payload
 
@@ -73,7 +72,7 @@ def jsonStatus(str,id=None,Tag=None,Data=None):
     return json.dumps(res)+'\n'
 
 # Process the payload and carry out each of the desired functionalities.
-#
+
 # Lock and DataStore MUST be different. Unlock REMOVES data is the same.
 
 def ProcessPayload(data):
