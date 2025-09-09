@@ -12,7 +12,7 @@ BaseDir="/home/JackrabbitDLM"
 cd $BaseDir
 
 while true ; do
-    $BaseDir/JackrabbitDLM
+    $BaseDir/JackrabbitDLM > $BaseDir/Logs/Errors 2>&1
     sleep 60
 done
 

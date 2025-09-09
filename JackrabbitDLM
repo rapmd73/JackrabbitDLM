@@ -1,9 +1,27 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
-# Jackrabbit DLM
+# Jackrabbit DLM (Distributed Lock Manager)
 # 2021 Copyright © Robert APM Darin
 # All rights reserved unconditionally.
+
+# This code is a program designed to manage locks and data storage in a system.
+# It allows users to lock and unlock resources, as well as store, retrieve, and
+# erase data associated with those resources. The program operates by listening
+# for incoming requests on a specific port, processing these requests based on
+# the actions specified (like locking or unlocking), and maintaining a record
+# of active locks and their expiration times.
+
+# When a user sends a request, the program checks if it’s valid and whether the
+# requester has permission to perform the action. If everything checks out, it
+# updates its records accordingly. The program also keeps track of various
+# statistics related to its operations, such as how many requests it has
+# handled or if there have been any errors.
+
+# Additionally, it logs important events for monitoring purposes and manages
+# memory efficiently by cleaning up expired locks or unused data. Overall, this
+# code serves as an efficient tool for coordinating access to shared resources
+# while ensuring that only authorized users can manipulate them.
 
 # For (un)locking
 
@@ -129,7 +147,7 @@ def ProcessPayload(data):
             # The current owner want the lock reset to a specific duration/held longer
             elif Locker[FileName]['ID']==dataDB['ID']:
                 Locker[FileName]['Expire']=time.time()+float(dataDB['Expire'])
-                Statistics['Lock']=Statistics.get('Lock',0)+1
+                Statistics['Relock']=Statistics.get('Relock',0)+1
                 return jsonStatus("Locked",Locker[FileName]['ID'])
             # Lock access by a non-owner ID
             else:
