@@ -177,7 +177,7 @@ def ProcessPayload(data):
                 Statistics['GetNF']=Statistics.get('GetNF',0)+1
                 return jsonStatus("NotFound")
             # Verify owner of data
-            elif Locker[FileName]['ID']==dataDB['ID']:
+            elif Locker[FileName]['ID']==dataDB['ID'] and time.time()<=Locker[FileName]['Expire']:
                 if 'DataStore' in Locker[FileName]:
                     Statistics['Get']=Statistics.get('Get',0)+1
                     return jsonStatus("Done",Locker[FileName]['ID'],Tag="DataStore",Data=Locker[FileName]['DataStore'])
@@ -346,18 +346,17 @@ def main():
         now=time.time()
         for k in list(Locker):
             if now>Locker[k]['Expire']:
-                if Locker[k]['Expire']>0:
+                if 'DataStore' in Locker[k]:
                     Statistics['ExpiredData']=Statistics.get('ExpiredData',0)+1
                 else:
-                    if Locker[k]['Expire']>0:
-                        Statistics['ExpiredLock']=Statistics.get('ExpiredLocked',0)+1
+                    Statistics['ExpiredLock']=Statistics.get('ExpiredLocked',0)+1
                 Locker.pop(k,None)
             # For accuracy, must be after possible removal
             if k in Locker:
                 if 'DataStore' in Locker[k]:
-                    Statistics['AData']+=1 #=Statistics.get('AData',0)+1
+                    Statistics['AData']+=1
                 else:
-                    Statistics['ALock']+=1 #=Statistics.get('ALock',0)+1
+                    Statistics['ALock']+=1
 
         ct=datetime.now()
         if ct.hour!=OldHour and len(Statistics)>0:
