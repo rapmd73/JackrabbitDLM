@@ -46,6 +46,7 @@ import json
 
 Version="0.0.0.0.130"
 MaxBlockSize=4096
+MaxPayloadSize=(1*1024*1024)          # 1 MB maximum payload
 BaseDirectory='/home/JackrabbitDLM'
 LogDirectory="/home/JackrabbitDLM/Logs"
 
@@ -319,6 +320,19 @@ def main():
                             queue.pop(fds,None)
                         fds.close()
                     else:
+                        # Sanity check to prevent memory exhaustion
+                        # Potential attack
+                        if len(dataStore[fds])+len(data)>MaxPayloadSize:
+                            if fds in dataStore:
+                                dataStore.pop(fds,None)
+                            if fds in inputs:
+                                inputs.remove(fds)
+                            if fds in queue:
+                                queue.pop(fds,None)
+                            fds.close()
+                            Statistics['DataOverrun']=Statistics.get('DataOverrun',0)+1
+                            continue
+
                         # Collect the entire line.
                         try:
                             data=data.decode('utf-8')
