@@ -85,24 +85,6 @@ for field in sorted(fields):
 # Create and save figure
 fig1 = go.Figure(traces)
 
-if ih=='h':
-    fig1.add_layout_image(dict(
-        source='https://rapmd.net/RAPMDlogo.png',
-        xref='paper',yref='paper',
-        xanchor='center',yanchor='middle',
-        x=0.5,y=0.5,
-        sizex=1,sizey=1,
-        opacity=0.1
-    ))
-else:
-    fig1.add_layout_image(dict(
-        source='file:///var/www/vhosts/rapmd.net/httpdocs/RAPMDlogo.png',
-        xref='paper',yref='paper',
-        xanchor='center',yanchor='middle',
-        x=0.5,y=0.5,
-        sizex=1,sizey=1,
-        opacity=0.1
-    ))
 fig1.update_yaxes(title_text='DLM Calls')
 fig1.update_layout(autosize=True,title={"text":"JackrabbitDLM Statistics","x":0.5,"xanchor":"center","yanchor":"top"},template='plotly_white',legend_title='Calls')
 
