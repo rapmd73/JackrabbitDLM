@@ -45,6 +45,7 @@ import select
 import json
 
 Version="0.0.0.0.130"
+MaxBlockSize=4096
 BaseDirectory='/home/JackrabbitDLM'
 LogDirectory="/home/JackrabbitDLM/Logs"
 
@@ -189,6 +190,11 @@ def ProcessPayload(data):
                 Statistics['NotOwner']=Statistics.get('NotOwner',0)+1
                 return jsonStatus("NotOwner")
         elif action=='put':
+            # If there is no DataStore, its broke.
+            if 'DataStore' not in dataDB:
+                Statistics['BadPayload']=Statistics.get('BadPayload',0)+1
+                return jsonStatus("BadPayload")
+
             # New memory object
             if FileName not in Locker:
                 dStore={}
@@ -297,7 +303,7 @@ def main():
                 else:
                     data=None
                     try:
-                        data=fds.recv(1024)
+                        data=fds.recv(MaxBlockSize)
                     except:
                         # Sleep based upon server load
                         time.sleep(1)
@@ -314,9 +320,12 @@ def main():
                         fds.close()
                     else:
                         # Collect the entire line.
-                        data=data.decode()
+                        try:
+                            data=data.decode('utf-8')
+                        except:
+                            continue
                         dataStore[fds]+=data
-                        if data[-1]=='\n':
+                        if dataStore[fds][-1]=='\n':
                             queue[fds]=ProcessPayload(dataStore[fds])
 
         # Send response and close connection
@@ -328,6 +337,7 @@ def main():
                 Statistics['Out']=Statistics.get('Out',0)+1
                 if fds in queue:
                     try:
+                        fds.setblocking(1)
                         fds.sendall(queue[fds].encode())
                     except:
                         if fds in dataStore:
@@ -349,7 +359,7 @@ def main():
                 if 'DataStore' in Locker[k]:
                     Statistics['ExpiredData']=Statistics.get('ExpiredData',0)+1
                 else:
-                    Statistics['ExpiredLock']=Statistics.get('ExpiredLocked',0)+1
+                    Statistics['ExpiredLock']=Statistics.get('ExpiredLock',0)+1
                 Locker.pop(k,None)
             # For accuracy, must be after possible removal
             if k in Locker:

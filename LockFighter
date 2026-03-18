@@ -6,13 +6,13 @@
 # All rights reserved unconditionally.
 
 import sys
-sys.path.append('/home/JackrabbitDLM')
+sys.path.append('/home/GitHub/JackrabbitDLM')
 import os
 import time
 import json
 import random
 
-import JRLocker as JRL
+import DLMLocker as DLM
 
 m=1000
 if len(sys.argv)>1:
@@ -29,8 +29,8 @@ r=0     # Reads
 w=0     # Writes
 
 # Connection timeout is 10 seconds
-fw1=JRL.Locker("LockerTest",Timeout=10,Retry=0)
-Memory=JRL.Locker('LockFighter',ID='LockFighterMemory')
+fw1=DLM.Locker("LockerTest",Timeout=10,Retry=0)
+Memory=DLM.Locker('LockFighter',ID='LockFighterMemory')
 
 stime=time.time()
 while c<m:
@@ -43,7 +43,7 @@ while c<m:
     if rl=='locked':
         try:
             # Consume
-            sData=json.loads(Memory.Get())
+            sData=Memory.Get()
             r+=1
             # If found, increment
             if 'DataStore' in sData:
@@ -77,4 +77,4 @@ etime=time.time()
 cr=0
 if f>0:
     cr=round((f/(s+f))*100,2)
-print(str(RetryLocker)[0],os.getpid(),etime-stime,f,s,r,w,cr,c)
+print(str(RetryLocker)[0],os.getpid(),f"{etime-stime:.8f}",f,s,r,w,cr,c)
