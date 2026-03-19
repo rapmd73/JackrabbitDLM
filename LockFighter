@@ -55,6 +55,11 @@ while c<m:
                     c+=1
                     Memory.Put(data=str(c),expire=10)
                     w+=1
+                # Make a random block of garbage that will be abandoned
+                Junker=DLM.Locker('Junker')
+                Junker.Put(data=str(os.urandom(128*1024)),expire=5)
+                # Play nice and clean up.
+                # Junker.Erase()
             # If not found, create it
             else:
                 Memory.Put(data=str(c),expire=10)

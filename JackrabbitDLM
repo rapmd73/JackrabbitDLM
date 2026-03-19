@@ -44,7 +44,7 @@ import socket
 import select
 import json
 
-Version="0.0.0.0.130"
+Version="0.0.0.1.300"
 BaseDirectory='/home/JackrabbitDLM'
 LogDirectory="/home/JackrabbitDLM/Logs"
 
@@ -118,139 +118,155 @@ def ProcessPayload(data):
     except: # damaged payload
         Statistics['BadPayload']=Statistics.get('BadPayload',0)+1
         return jsonStatus("BadPayload")
-    else: # Find the lock
 
-        # FileName and Action are required. For memory fetches, FileName is memory ID.
+    # Find the lock
 
-        if 'FileName' not in dataDB \
-        or 'Action' not in dataDB \
-        or 'ID' not in dataDB \
-        or 'Expire' not in dataDB:
+    # FileName and Action are required. For memory fetches, FileName is memory ID.
+
+    if 'FileName' not in dataDB \
+    or 'Action' not in dataDB \
+    or 'ID' not in dataDB \
+    or 'Expire' not in dataDB:
+        Statistics['BadPayload']=Statistics.get('BadPayload',0)+1
+        return jsonStatus("BadPayload")
+
+    # Valid actions:
+    #    Lock
+    #    Unlock
+    #    Get
+    #    Put        Only this command allows a DataStore in the payload
+    #    Erase
+
+    # With what we are doing. FileName also doubles as memory ID
+    FileName=dataDB['FileName']
+    action=dataDB['Action'].lower()
+
+    # Handle the LOCK action. This allows an advisory locking method
+    # that should work on any platform. Locking/Unlocking can be
+    # used as a rate limiter as well.
+
+    if action=='lock':
+        # New lock request
+        if FileName not in Locker:
+            dataLock={}
+            dataLock['ID']=dataDB['ID']
+            dataLock['Expire']=time.time()+float(dataDB['Expire'])
+            Locker[FileName]=dataLock
+            Statistics['Lock']=Statistics.get('Lock',0)+1
+            return jsonStatus("Locked",Locker[FileName]['ID'])
+
+        # Lock has expired, now unlocked
+        if time.time()>Locker[FileName]['Expire']:
+            Locker[FileName]['ID']=dataDB['ID'] # assign the new ID
+            Locker[FileName]['Expire']=time.time()+float(dataDB['Expire'])
+            Statistics['Expired']=Statistics.get('Expired',0)+1
+            Statistics['Lock']=Statistics.get('Lock',0)+1
+            return jsonStatus("Locked",Locker[FileName]['ID'])
+
+        # The current owner want the lock reset to a specific duration/held longer
+        if Locker[FileName]['ID']==dataDB['ID']:
+            Locker[FileName]['Expire']=time.time()+float(dataDB['Expire'])
+            Statistics['Relock']=Statistics.get('Relock',0)+1
+            return jsonStatus("Locked",Locker[FileName]['ID'])
+
+        # Lock access by a non-owner ID
+        Statistics['NotOwner']=Statistics.get('NotOwner',0)+1
+        return jsonStatus("NotOwner")
+    # Unlock request
+    elif action=='unlock':
+        # Just pass through unlock
+        if FileName not in Locker:
+            Statistics['UnlockNF']=Statistics.get('UnlockNF',0)+1
+            return jsonStatus("Unlocked")
+
+        # Verify owner and unlock
+        if Locker[FileName]['ID']==dataDB['ID']:
+            if Locker[FileName]['Expire']>0:
+                Statistics['Unlock']=Statistics.get('Unlock',0)+1
+            Locker[FileName]['Expire']=0
+            return jsonStatus("Unlocked",Locker[FileName]['ID'])
+
+        # Unock access by a non-owner ID. This may seem idiotic, but its an
+        # absolute for keeping the lock from being hijacked.
+        Statistics['NotOwner']=Statistics.get('NotOwner',0)+1
+        return jsonStatus("NotOwner")
+    # Get memory reference
+    elif action=='get':
+        # Memory item doesn't exist
+        if FileName not in Locker:
+            Statistics['GetNF']=Statistics.get('GetNF',0)+1
+            return jsonStatus("NotFound")
+
+        # Verify owner of data
+        if Locker[FileName]['ID']==dataDB['ID'] and time.time()<=Locker[FileName]['Expire']:
+            if 'DataStore' in Locker[FileName]:
+                Statistics['Get']=Statistics.get('Get',0)+1
+                Statistics['DataOut']=Statistics.get('DataOut',0)+len(Locker[FileName]['DataStore'])
+                return jsonStatus("Done",Locker[FileName]['ID'],Tag="DataStore",Data=Locker[FileName]['DataStore'])
+
+            Statistics['GetNF']=Statistics.get('GetNF',0)+1
+            return jsonStatus("NoData",Locker[FileName]['ID'])
+
+        # Not the rightful owner
+        Statistics['NotOwner']=Statistics.get('NotOwner',0)+1
+        return jsonStatus("NotOwner")
+    elif action=='put':
+        # If there is no DataStore, its broke.
+        if 'DataStore' not in dataDB:
             Statistics['BadPayload']=Statistics.get('BadPayload',0)+1
             return jsonStatus("BadPayload")
 
-        # Valid actions:
-        #    Lock
-        #    Unlock
-        #    Get
-        #    Put
-        #    Erase
+        # New memory object
+        if FileName not in Locker:
+            dStore={}
+            dStore['ID']=dataDB['ID']
+            dStore['Expire']=time.time()+float(dataDB['Expire'])
+            dStore['DataStore']=dataDB['DataStore']
+            Locker[FileName]=dStore
+            Statistics['PutNew']=Statistics.get('PutNew',0)+1
+            Statistics['DataIn']=Statistics.get('DataIn',0)+len(dataDB['DataStore'])
+            return jsonStatus("Done",Locker[FileName]['ID'])
 
-        # What are we doing. FileName also doubles as memory ID
-        FileName=dataDB['FileName']
-        action=dataDB['Action'].lower()
+        # Existing memory object, verify owner and reset expiration timeout
+        if Locker[FileName]['ID']==dataDB['ID']:
+            Locker[FileName]['Expire']=time.time()+float(dataDB['Expire'])
+            Locker[FileName]['DataStore']=dataDB['DataStore']
+            Statistics['DataIn']=Statistics.get('DataIn',0)+len(dataDB['DataStore'])
+            Statistics['PutUpdate']=Statistics.get('PutUpdate',0)+1
+            return jsonStatus("Done",Locker[FileName]['ID'])
 
-        # Handle the LOCK action. This allows an advisory locking method that should
-        # work on any platform. Locking/Unlocking can be used as a rate limiter as
-        # well.
+        # Not the rightful owner
+        Statistics['NotOwner']=Statistics.get('NotOwner',0)+1
+        return jsonStatus("NotOwner")
+    # Erase request
+    elif action=='erase':
+        # Just pass through erase
+        if FileName not in Locker:
+            Statistics['EraseNF']=Statistics.get('EraseNF',0)+1
+            return jsonStatus("NotFound")
 
-        if action=='lock':
-            # New lock request
-            if FileName not in Locker:
-                dataLock={}
-                dataLock['ID']=dataDB['ID']
-                dataLock['Expire']=time.time()+float(dataDB['Expire'])
-                Locker[FileName]=dataLock
-                Statistics['Lock']=Statistics.get('Lock',0)+1
-                return jsonStatus("Locked",Locker[FileName]['ID'])
-            # Lock has expired, now unlocked
-            elif time.time()>Locker[FileName]['Expire']:
-                Locker[FileName]['ID']=dataDB['ID'] # assign the new ID
-                Locker[FileName]['Expire']=time.time()+float(dataDB['Expire'])
-                Statistics['Expired']=Statistics.get('Expired',0)+1
-                Statistics['Lock']=Statistics.get('Lock',0)+1
-                return jsonStatus("Locked",Locker[FileName]['ID'])
-            # The current owner want the lock reset to a specific duration/held longer
-            elif Locker[FileName]['ID']==dataDB['ID']:
-                Locker[FileName]['Expire']=time.time()+float(dataDB['Expire'])
-                Statistics['Relock']=Statistics.get('Relock',0)+1
-                return jsonStatus("Locked",Locker[FileName]['ID'])
-            # Lock access by a non-owner ID
-            else:
-                Statistics['NotOwner']=Statistics.get('NotOwner',0)+1
-                return jsonStatus("NotOwner")
-        # Unlock request
-        elif action=='unlock':
-            # Just pass through unlock
-            if FileName not in Locker:
-                Statistics['UnlockNF']=Statistics.get('UnlockNF',0)+1
-                return jsonStatus("Unlocked")
-            # Verify owner and unlock
-            elif Locker[FileName]['ID']==dataDB['ID']:
-                if Locker[FileName]['Expire']>0:
-                    Statistics['Unlock']=Statistics.get('Unlock',0)+1
-                Locker[FileName]['Expire']=0
-                return jsonStatus("Unlocked",Locker[FileName]['ID'])
-            # Unock access by a non-owner ID. This may seem idiotic, but its an
-            # absolute for keeping the lock from being hijacked.
-            else:
-                Statistics['NotOwner']=Statistics.get('NotOwner',0)+1
-                return jsonStatus("NotOwner")
-        # Get memory reference
-        elif action=='get':
-            # Memory item doesn't exist
-            if FileName not in Locker:
-                Statistics['GetNF']=Statistics.get('GetNF',0)+1
-                return jsonStatus("NotFound")
-            # Verify owner of data
-            elif Locker[FileName]['ID']==dataDB['ID'] and time.time()<=Locker[FileName]['Expire']:
-                if 'DataStore' in Locker[FileName]:
-                    Statistics['Get']=Statistics.get('Get',0)+1
-                    return jsonStatus("Done",Locker[FileName]['ID'],Tag="DataStore",Data=Locker[FileName]['DataStore'])
-                else:
-                    Statistics['GetNF']=Statistics.get('GetNF',0)+1
-                    return jsonStatus("NoData",Locker[FileName]['ID'])
-            # Not the rightful owner
-            else:
-                Statistics['NotOwner']=Statistics.get('NotOwner',0)+1
-                return jsonStatus("NotOwner")
-        elif action=='put':
-            # If there is no DataStore, its broke.
-            if 'DataStore' not in dataDB:
-                Statistics['BadPayload']=Statistics.get('BadPayload',0)+1
-                return jsonStatus("BadPayload")
+        # if NO DataStore, corrupted memory item...
+        if 'DataStore' not in Locker[FileName]:
+            Locker[FileName]['Expire']=0
+            Statistics['Corruption']=Statistics.get('Corruption',0)+1
+            return jsonStatus("Corruption")
 
-            # New memory object
-            if FileName not in Locker:
-                dStore={}
-                dStore['ID']=dataDB['ID']
-                dStore['Expire']=time.time()+float(dataDB['Expire'])
-                dStore['DataStore']=dataDB['DataStore']
-                Locker[FileName]=dStore
-                Statistics['PutNew']=Statistics.get('PutNew',0)+1
-                return jsonStatus("Done",Locker[FileName]['ID'])
-            # Existing memory object, verify owner and reset expiration timeout
-            elif Locker[FileName]['ID']==dataDB['ID']:
-                Locker[FileName]['Expire']=time.time()+float(dataDB['Expire'])
-                Locker[FileName]['DataStore']=dataDB['DataStore']
-                Statistics['PutUpdate']=Statistics.get('PutUpdate',0)+1
-                return jsonStatus("Done",Locker[FileName]['ID'])
-            # Not the rightful owner
-            else:
-                Statistics['NotOwner']=Statistics.get('NotOwner',0)+1
-                return jsonStatus("NotOwner")
-        # Erase request
-        elif action=='erase':
-            # Just pass through erase
-            if FileName not in Locker:
-                Statistics['EraseNF']=Statistics.get('EraseNF',0)+1
-                return jsonStatus("NotFound")
-            # Verify owner and erase memory. Erase is just resetting expiration to 0.
-            # Will be remove in main function.
-            elif Locker[FileName]['ID']==dataDB['ID']:
-                Locker[FileName]['Expire']=0
-                MaxDataHoldSize+=len(Locker[FileName]['DataStore'])
-                Locker[FileName]['DataStore']=None
-                Statistics['Erased']=Statistics.get('Erased',0)+1
-                return jsonStatus("Done",Locker[FileName]['ID'])
-            # Not the rightful owner
-            else:
-                Statistics['NotOwner']=Statistics.get('NotOwner',0)+1
-                return jsonStatus("NotOwner")
-        # Wrong key
-        else:
-            Statistics['BadAction']=Statistics.get('BadAction',0)+1
-            return jsonStatus("BadAction")
+        # Verify owner and erase memory. Erase is just resetting expiration to 0.
+        # Will be remove in main function.
+        if Locker[FileName]['ID']==dataDB['ID']:
+            Locker[FileName]['Expire']=0
+            MaxDataHoldSize+=len(Locker[FileName]['DataStore'])
+            Locker[FileName]['DataStore']=None
+            Statistics['Erased']=Statistics.get('Erased',0)+1
+            return jsonStatus("Done",Locker[FileName]['ID'])
+
+        # Not the rightful owner, fall thru
+        Statistics['NotOwner']=Statistics.get('NotOwner',0)+1
+        return jsonStatus("NotOwner")
+
+    # Wrong key
+    Statistics['BadAction']=Statistics.get('BadAction',0)+1
+    return jsonStatus("BadAction")
 
 ###
 ### Main Driver
@@ -394,8 +410,9 @@ def main():
         for k in list(Locker):
             if now>Locker[k]['Expire']:
                 if 'DataStore' in Locker[k]:
-                    MaxDataHoldSize+=len(Locker[k]['DataStore'])
-                    Locker[k]['DataStore']=None
+                    if Locker[k]['DataStore'] is not None:
+                        MaxDataHoldSize+=len(Locker[k]['DataStore'])
+                        Locker[k]['DataStore']=None
                     Statistics['ExpiredData']=Statistics.get('ExpiredData',0)+1
                 else:
                     Statistics['ExpiredLock']=Statistics.get('ExpiredLock',0)+1
