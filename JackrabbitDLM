@@ -45,8 +45,6 @@ import select
 import json
 
 Version="0.0.0.0.130"
-MaxBlockSize=4096
-MaxPayloadSize=(1*1024*1024)          # 1 MB maximum payload
 BaseDirectory='/home/JackrabbitDLM'
 LogDirectory="/home/JackrabbitDLM/Logs"
 
@@ -57,6 +55,21 @@ Statistics={}
 # Required global for the process to work
 
 Locker={}
+
+# Memory restrainst to optimize performance/stability. Reads this amount
+# every call.
+
+MaxBlockSize=4096
+
+# Maximum 1 MB allowed for the entire payload. Prevents memory
+# exhaustion (leaching) from malicious/bad program.
+
+MaxPayloadSize=(1*1024*1024)
+
+# This will determine when to force a full gc collect based upon the
+# memory actually deleted.
+
+MaxDataHoldSize=0
 
 # Write pid in port file
 
@@ -93,11 +106,12 @@ def jsonStatus(str,id=None,Tag=None,Data=None):
 
 # Process the payload and carry out each of the desired functionalities.
 
-# Lock and DataStore MUST be different. Unlock REMOVES data is the same.
+# Lock and DataStore MUST be different. Unlock REMOVES data as the same.
 
 def ProcessPayload(data):
     global Statistics
     global Locker
+    global MaxDataHoldSize
 
     try:
         dataDB=json.loads(data)
@@ -225,6 +239,7 @@ def ProcessPayload(data):
             # Will be remove in main function.
             elif Locker[FileName]['ID']==dataDB['ID']:
                 Locker[FileName]['Expire']=0
+                MaxDataHoldSize+=len(Locker[FileName]['DataStore'])
                 Locker[FileName]['DataStore']=None
                 Statistics['Erased']=Statistics.get('Erased',0)+1
                 return jsonStatus("Done",Locker[FileName]['ID'])
@@ -244,6 +259,7 @@ def ProcessPayload(data):
 def main():
     global Statistics
     global Locker
+    global MaxDataHoldSize
 
     OldHour=-1
 
@@ -306,13 +322,17 @@ def main():
                     try:
                         data=fds.recv(MaxBlockSize)
                     except:
+                        # Memory management when timeout
+                        gc.collect()
                         # Sleep based upon server load
+                        Statistics['Idle']=Statistics.get('Idle',0)+1
                         time.sleep(1)
 
                     # No data received, close connection, clean up and sleep
 
                     if not data or data==None:
                         if fds in dataStore:
+                            MaxDataHoldSize+=len(dataStore[fds])
                             dataStore.pop(fds,None)
                         if fds in inputs:
                             inputs.remove(fds)
@@ -324,6 +344,7 @@ def main():
                         # Potential attack
                         if len(dataStore[fds])+len(data)>MaxPayloadSize:
                             if fds in dataStore:
+                                MaxDataHoldSize+=len(dataStore[fds])
                                 dataStore.pop(fds,None)
                             if fds in inputs:
                                 inputs.remove(fds)
@@ -339,6 +360,7 @@ def main():
                         except:
                             continue
                         dataStore[fds]+=data
+                        # One and ONLY one request allowed
                         if dataStore[fds][-1]=='\n':
                             queue[fds]=ProcessPayload(dataStore[fds])
 
@@ -355,6 +377,7 @@ def main():
                         fds.sendall(queue[fds].encode())
                     except:
                         if fds in dataStore:
+                            MaxDataHoldSize+=len(dataStore[fds])
                             dataStore.pop(fds,None)
                         if fds in inputs:
                             inputs.remove(fds)
@@ -371,11 +394,13 @@ def main():
         for k in list(Locker):
             if now>Locker[k]['Expire']:
                 if 'DataStore' in Locker[k]:
+                    MaxDataHoldSize+=len(Locker[k]['DataStore'])
+                    Locker[k]['DataStore']=None
                     Statistics['ExpiredData']=Statistics.get('ExpiredData',0)+1
                 else:
                     Statistics['ExpiredLock']=Statistics.get('ExpiredLock',0)+1
                 Locker.pop(k,None)
-            # For accuracy, must be after possible removal
+            # For accuracy, must be after possible removal, Active
             if k in Locker:
                 if 'DataStore' in Locker[k]:
                     Statistics['AData']+=1
@@ -391,7 +416,10 @@ def main():
             Statistics={}
 
         # Long term memory management
-        gc.collect()
+        if MaxDataHoldSize>MaxPayloadSize:
+            Statistics['ForcedGC']=Statistics.get('ForcedGC',0)+1
+            MaxDataHoldSize=0
+            gc.collect()
 
 if __name__ == '__main__':
     main()
