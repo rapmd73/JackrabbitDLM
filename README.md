@@ -39,8 +39,6 @@ mem = Locker("SecureState", Encoder=my_encoder, Decoder=my_decoder)
 mem.Put(data="Sensitive Information", expire=60)
 ```
 
----
-
 ## 🛠 Usage & Implementation
 
 ### 1. Launch the Server
