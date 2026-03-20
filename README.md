@@ -1,8 +1,8 @@
-# JackrabbitDLM: High-Performance Lightweight Distributed Lock Manager
+# Jackrabbit DLM: High-Performance Lightweight Distributed Lock Manager
 
-**JackrabbitDLM** is a professional-grade, zero-dependency Distributed Lock Manager (DLM) and volatile state coordinator, engineered for high-concurrency environments where coordinating distributed resources requires speed, simplicity, absolute data privacy, and a minimal footprint.
+**Jackrabbit DLM** is a professional-grade, zero-dependency Distributed Lock Manager (DLM) and volatile state coordinator, engineered for high-concurrency environments where coordinating distributed resources requires speed, simplicity, absolute data privacy, and a minimal footprint.
 
-As a high-performance alternative to heavy-duty coordinators like Redis, Etcd, or ZooKeeper, JackrabbitDLM utilizes a **"Blind Vault"** architecture and standard JSON-over-TCP protocol to provide **advisory locking** and **shared state management** while acting as a neutral arbiter that never sees or stores your raw data in plain text.
+As a high-performance alternative to heavy-duty coordinators like Redis, Etcd, or ZooKeeper, Jackrabbit DLM utilizes a **"Blind Vault"** architecture and standard JSON-over-TCP protocol to provide **advisory locking** and **shared state management** while acting as a neutral arbiter that never sees or stores your raw data in plain text.
 
 ## 🚀 Key Features
 
@@ -14,7 +14,7 @@ As a high-performance alternative to heavy-duty coordinators like Redis, Etcd, o
 
 ## 🔐 Customizable Encoding & Decoding
 
-One of JackrabbitDLM's most powerful features is the ability to swap the data transport layer. While it includes a high-speed, table-based default encoder, you can inject your own functions to handle specific needs like **AES encryption, Zlib compression, or MsgPack serialization.**
+One of Jackrabbit DLM's most powerful features is the ability to swap the data transport layer. While it includes a high-speed, table-based default encoder, you can inject your own functions to handle specific needs like **AES encryption, Zlib compression, or MsgPack serialization.**
 
 ### Using a Custom Encoder/Decoder
 
@@ -115,14 +115,14 @@ For implementation in **Go, Rust, or Node.js**, communicate via TCP using newlin
 | Product | Architecture | Data Visibility (Server-Side) | Serialization | Why Jackrabbit DLM is Superior |
 | :--- | :--- | :--- | :--- | :--- |
 | **Jackrabbit DLM** | **Lightweight TCP** | **ZERO Visibility (Blind)** | **User-Swappable** | **Privacy & Stealth:** User data (*DataStore*) is never plain-text. User-swappable encoders allow for AES-256 or custom logic. The server is a "Blind Vault" by design. |
-| **Redis (Redlock)** | KV Store | **Full Visibility** (Plain Text) | Fixed | **No Data Exposure:** Redis logs your data in plain text. Jackrabbit ensures a server compromise reveals nothing but encoded blobs. |
-| **ZooKeeper** | Distributed Tree | **Full Visibility** (Plain Text) | Fixed | **Ultra-Lightweight:** No JVM required. Jackrabbit is a single-file script with built-in anti-hijacking and ownership protections. |
-| **Etcd** | Distributed KV | **High Visibility** | Fixed GRPC | **Customizable Transport:** Etcd is a binary "black box." Jackrabbit lets you swap your own encryption logic in 2 lines of code. |
-| **PostgreSQL** | Relational DB | **Full Visibility** | SQL Literals | **Performance:** DB locks are slow and leave plain-text traces in logs. Jackrabbit is volatile, memory-resident, and strictly private. |
+| **Redis (Redlock)** | KV Store | **Full Visibility** (Plain Text) | Fixed | **No Data Exposure:** Redis logs your data in plain text. Jackrabbit DLM ensures a server compromise reveals nothing but encoded blobs. |
+| **ZooKeeper** | Distributed Tree | **Full Visibility** (Plain Text) | Fixed | **Ultra-Lightweight:** No JVM required. Jackrabbit DLM is a single-file script with built-in anti-hijacking and ownership protections. |
+| **Etcd** | Distributed KV | **High Visibility** | Fixed GRPC | **Customizable Transport:** Etcd is a binary "black box." Jackrabbit DLM lets you swap your own encryption logic in 2 lines of code. |
+| **PostgreSQL** | Relational DB | **Full Visibility** | SQL Literals | **Performance:** DB locks are slow and leave plain-text traces in logs. Jackrabbit DLM is volatile, memory-resident, and strictly private. |
 
 ## 🛡️ Security & Guardrails
 
-JackrabbitDLM is built to withstand both buggy clients and malicious environments:
+Jackrabbit DLM is built to withstand both buggy clients and malicious environments:
 *   **Ownership Enforcement:** Prevents "hijacking." Only the `ID` that created a lock can release or modify it.
 *   **1MB Payload Limit:** Prevents memory exhaustion and "leaching" attacks on the server.
 *   **Self-Healing TTL:** All locks and data have a mandatory Time-To-Live. If a client crashes, the resource is automatically freed.
