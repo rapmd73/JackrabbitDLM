@@ -10,6 +10,7 @@ sys.path.append('/home/JackrabbitAI/Library')
 import os
 import time
 import datetime
+import math
 import json
 import plotly.express as px
 import plotly.graph_objects as go
@@ -79,14 +80,15 @@ for v in Dates.values():
 # Create one trace per field
 traces = []
 for field in sorted(fields):
-    y = [Dates[dt].get(field, 0) for dt in dates]
+    yraw=[Dates[dt].get(field,0) for dt in dates]
+    y=[math.log(v+1) for v in yraw]
     traces.append(go.Scatter(x=dates, y=y, mode='lines', name=field))
 
 # Create and save figure
 fig1 = go.Figure(traces)
 
 fig1.update_yaxes(title_text='DLM Calls')
-fig1.update_layout(autosize=True,title={"text":"JackrabbitDLM Statistics","x":0.5,"xanchor":"center","yanchor":"top"},template='plotly_white',legend_title='Calls')
+fig1.update_layout(autosize=True,title={"text":"JackrabbitDLM Statistics (log)","x":0.5,"xanchor":"center","yanchor":"top"},template='plotly_white',legend_title='Calls')
 
 if ih=='h':
     fig1.write_html(fn)
