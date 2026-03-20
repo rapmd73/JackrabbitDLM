@@ -114,7 +114,7 @@ For implementation in **Go, Rust, or Node.js**, communicate via TCP using newlin
 
 | Product | Architecture | Data Visibility (Server-Side) | Serialization | Why Jackrabbit DLM is Superior |
 | :--- | :--- | :--- | :--- | :--- |
-| **Jackrabbit DLM** | **Lightweight TCP** | **ZERO Visibility (Blind)** | **User-Swappable** | **Privacy & Stealth:** Data is never plain-text. User-swappable encoders allow for AES-256 or custom logic. The server is a "Blind Vault" by design. |
+| **Jackrabbit DLM** | **Lightweight TCP** | **ZERO Visibility (Blind)** | **User-Swappable** | **Privacy & Stealth:** User data (*DataStore*) is never plain-text. User-swappable encoders allow for AES-256 or custom logic. The server is a "Blind Vault" by design. |
 | **Redis (Redlock)** | KV Store | **Full Visibility** (Plain Text) | Fixed | **No Data Exposure:** Redis logs your data in plain text. Jackrabbit ensures a server compromise reveals nothing but encoded blobs. |
 | **ZooKeeper** | Distributed Tree | **Full Visibility** (Plain Text) | Fixed | **Ultra-Lightweight:** No JVM required. Jackrabbit is a single-file script with built-in anti-hijacking and ownership protections. |
 | **Etcd** | Distributed KV | **High Visibility** | Fixed GRPC | **Customizable Transport:** Etcd is a binary "black box." Jackrabbit lets you swap your own encryption logic in 2 lines of code. |
