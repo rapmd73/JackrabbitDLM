@@ -61,10 +61,10 @@ Locker={}
 
 MaxBlockSize=4096
 
-# Maximum 1 MB allowed for the entire payload. Prevents memory
+# Maximum megabytes allowed for the entire payload. Prevents memory
 # exhaustion (leaching) from malicious/bad program.
 
-MaxPayloadSize=(1*1024*1024)
+MaxPayloadSize=(10*1024*1024)
 
 # This will determine when to force a full gc collect based upon the
 # memory actually deleted.

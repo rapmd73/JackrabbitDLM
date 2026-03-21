@@ -32,6 +32,8 @@ w=0     # Writes
 fw1=DLM.Locker("LockerTest",Timeout=10,Retry=0)
 Memory=DLM.Locker('LockFighter',ID='LockFighterMemory')
 
+# Every fight gets a different write value frequency. Goal is chaos.
+wv=random.random()
 stime=time.time()
 while c<m:
     rl=None
@@ -42,6 +44,7 @@ while c<m:
 
     if rl=='locked':
         try:
+            Junker=DLM.Locker('Junker')
             # Consume
             sData=Memory.Get()
             r+=1
@@ -51,15 +54,17 @@ while c<m:
 
                 # Write (produce) 25% of the time
                 rn=random.random()
-                if c<m and rn>0.75:
+                if c<m and rn>round(wv,2):
                     c+=1
                     Memory.Put(data=str(c),expire=10)
                     w+=1
                 # Make a random block of garbage that will be abandoned
-                Junker=DLM.Locker('Junker')
-                Junker.Put(data=str(os.urandom(128*1024)),expire=5)
+                if rn>0.5:
+                    Junker.Put(data=str(os.urandom(128*1024)),expire=5)
+                rn=random.random()
                 # Play nice and clean up.
-                # Junker.Erase()
+                if rn>0.75:
+                    Junker.Erase()
             # If not found, create it
             else:
                 Memory.Put(data=str(c),expire=10)
@@ -68,11 +73,13 @@ while c<m:
         except Exception as err:
             f+=1
             print(err)
-            time.sleep(0.1)
+            if RetryLocker:
+                time.sleep(0.1)
         fw1.Unlock()
     else:
         f+=1
-        time.sleep(0.1)
+        if RetryLocker:
+            time.sleep(0.1)
 
 # A proper program would use some kind of a waiting period to play nice with the CPU.
 #    time.sleep(0.1)
