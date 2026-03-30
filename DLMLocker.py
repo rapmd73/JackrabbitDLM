@@ -52,6 +52,8 @@ class Locker:
         self.timeout=Timeout
         self.port=Port
         self.host=Host
+        if self.host=='':
+            self.host='127.0.0.1'
 
     def dlmEncode(self,data_bytes):
         if isinstance(data_bytes, str):
@@ -73,9 +75,39 @@ class Locker:
 
     # Contact the Locker Server and WAIT for response. NOT thread safe.
 
+    def Talker(self, msg, casefold=True):
+        try:
+            # 1. create_connection() handles the 115 error internally.
+            # It blocks ONLY until connected or self.timeout is hit.
+            ls = socket.create_connection((self.host, self.port), timeout=self.timeout)
+
+            # 2. Use makefile for easy line-based reading.
+            sfn = ls.makefile('rw', buffering=1)
+
+            sfn.write(msg + '\n') # Ensure newline for readline to work
+            sfn.flush()
+
+            # 3. No while loop needed; readline() respects the socket timeout.
+            buf = sfn.readline()
+
+            # 4. Clean up before returning
+            sfn.close()
+            ls.close()
+
+            if buf:
+                res = buf.strip()
+                return res.lower() if casefold else res
+            return None
+
+        except (socket.timeout, OSError) as err:
+            print(f"Error: {err}")
+            return None
+
+    """
     def Talker(self,msg,casefold=True):
         try:
             ls=socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            ls.setblocking(1)
             ls.settimeout(self.timeout)
             ls.connect((self.host, self.port))
             sfn=ls.makefile('rw')
@@ -96,7 +128,7 @@ class Locker:
         except Exception as err:
             print("Error",err)
             return None
-
+    """
     # Contact Lock server
 
     def Retry(self,action,expire,casefold=True):
@@ -203,6 +235,9 @@ class Locker:
 
         if jdata is not None and 'DataStore' in jdata:
             jdata['DataStore']=self.decoder(jdata['DataStore'])
+            if isinstance(jdata['DataStore'],bytes):
+                jdata['DataStore']=jdata['DataStore'].decode('utf-8')
+
         return jdata
 
     def Put(self,expire,data):
