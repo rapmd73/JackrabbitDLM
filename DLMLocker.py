@@ -27,8 +27,8 @@ import secrets
 class Locker:
     # Initialize the file name
     def __init__(self, filename, Retry=7, RetrySleep=1, Timeout=300, ID=None, Host='', Port=37373, Encoder=None, Decoder=None):
-        self.Version="0.0.0.1.370"
-        self.ulResp=['badpayload','locked','unlocked','notowner','notfound']
+        self.VERSION="0.0.0.1.380"
+        self.ulResp=['badpayload','locked','unlocked','notowner','notfound','version']
 
         # Encoding String
         self.ALPHABET='1aA2bB3cC4dD5eE6fF7gG8hH9iI0jJ!kK@lL#mM$nN%oO^pP&qQ*rR(sS)tT/uU?vV=wW+xX;yY:zZ'
@@ -210,6 +210,30 @@ class Locker:
 
     def Erase(self):
         return self.RetryData("Erase",0,None)
+
+    # Get running version
+
+    def Version(self):
+        data=self.RetryData("Version",0,None)
+        sv='Error'
+        try:
+            data=json.loads(data)
+        except:
+            pass
+
+        if 'ID' in data:
+            sv=data['ID']
+        lv=self.VERSION
+        v=f"{sv}:{lv}"
+        return v
+
+    # If JackrabbitDLM is loaded, the string will be in the return
+
+    def IsDLM(self):
+        v=self.Version()
+        if 'JackrabbitDLM' in v:
+            return True
+        return False
 
 ###
 ### END Library

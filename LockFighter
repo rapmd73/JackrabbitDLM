@@ -32,6 +32,10 @@ w=0     # Writes
 fw1=DLM.Locker("LockerTest",Timeout=10,Retry=0)
 Memory=DLM.Locker('LockFighter',ID='LockFighterMemory')
 
+if not fw1.IsDLM():
+    print("JackrabbitDLM not found/running")
+    sys.exit(1)
+
 # Every fight gets a different write value frequency. Goal is chaos.
 wv=random.random()
 stime=time.time()

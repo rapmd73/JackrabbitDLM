@@ -44,9 +44,9 @@ import socket
 import select
 import json
 
-Version="0.0.0.1.300"
-BaseDirectory='/home/JackrabbitDLM'
-LogDirectory="/home/JackrabbitDLM/Logs"
+Version="0.0.0.1.400"
+BaseDirectory="/home/JackrabbitDLM"
+LogDirectory=f"{BaseDirectory}/Logs"
 
 # Statistics
 
@@ -263,6 +263,10 @@ def ProcessPayload(data):
         # Not the rightful owner, fall thru
         Statistics['NotOwner']=Statistics.get('NotOwner',0)+1
         return jsonStatus("NotOwner")
+
+    # get active version number
+    elif action=='version':
+        return jsonStatus("Version",f"JackrabbitDLM/{Version}")
 
     # Wrong key
     Statistics['BadAction']=Statistics.get('BadAction',0)+1
