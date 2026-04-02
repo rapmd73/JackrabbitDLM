@@ -26,7 +26,7 @@ import secrets
 
 class Locker:
     # Initialize the file name
-    def __init__(self, filename, Retry=7, RetrySleep=1, Timeout=300, ID=None, Host='', Port=37373, Encoder=None, Decoder=None, name=None, identity=None, authenticator=None):
+    def __init__(self, filename, Retry=7, RetrySleep=1, Timeout=300, ID=None, Host='', Port=37373, Encoder=None, Decoder=None, name=None, identity=None):
         self.VERSION="0.0.0.1.380"
         self.ulResp=['badpayload','locked','unlocked','notowner','notfound','version']
 
@@ -48,7 +48,6 @@ class Locker:
             self.ID=ID
         self.name=name
         self.identity=identity
-        self.authenticator=authenticator
         self.filename=filename
         self.retryLimit=Retry
         self.retrysleep=RetrySleep
@@ -112,10 +111,9 @@ class Locker:
         payload={ "ID":self.ID, "FileName":self.filename, "Action":action,
                   "Expire":str(expire) }
 
-        if self.name or self.identity or self.authenticator:
+        if self.name or self.identity:
             payload['Name']=self.name
             payload['Identity']=self.identity
-            payload['Authenticator']=self.authenticator
 
         outbuf=json.dumps(payload)+'\n'
 
@@ -153,10 +151,9 @@ class Locker:
         payload={ "ID":self.ID, "FileName":self.filename, "Action":action,
                   "Expire":str(expire), "DataStore":data }
 
-        if self.name or self.identity or self.authenticator:
+        if self.name or self.identity:
             payload['Name']=self.name
             payload['Identity']=self.identity
-            payload['Authenticator']=self.authenticator
 
         outbuf=json.dumps(payload)+'\n'
 
@@ -187,10 +184,9 @@ class Locker:
         payload={ "ID":self.ID, "FileName":self.filename, "Action":"Lock",
                   "Expire":str(expire) }
 
-        if self.name or self.identity or self.authenticator:
+        if self.name or self.identity:
             payload['Name']=self.name
             payload['Identity']=self.identity
-            payload['Authenticator']=self.authenticator
 
         outbuf=json.dumps(payload)+'\n'
 

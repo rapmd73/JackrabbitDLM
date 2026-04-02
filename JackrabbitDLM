@@ -88,8 +88,7 @@ def ReadAuthentication(fn):
             buffer=json.loads(buffer)
         except:
             buffer=None
-        if buffer and (('Identity' in buffer and len(buffer['Identity'])<37) \
-        or ('Authenticator' in buffer and len(buffer['Authenticator'])<1023)):
+        if buffer and 'Identity' in buffer and len(buffer['Identity'])<1023:
             buffer=None
     else:
         buffer=None
@@ -144,8 +143,7 @@ def CheckAuthentication(dataDB,LockDB):
         or 'Identity' not in dataDB \
         or 'Authenticator' not in dataDB \
         or dataDB['Name']!=LockDB['Name'] \
-        or dataDB['Identity']!=LockDB['Identity'] \
-        or dataDB['Authenticator']!=LockDB['Authenticator']:
+        or dataDB['Identity']!=LockDB['Identity']:
             return False
 
     # No authentication needed
@@ -205,10 +203,8 @@ def ProcessPayload(data):
         or 'Authenticator' not in dataDB \
         or 'Identity' not in auth \
         or 'Authenticator' not in auth \
-        or len(dataDB['Identity'])<37 \
-        or len(dataDB['Authenticator'])<1023 \
-        or dataDB['Identity']!=auth['Identity'] \
-        or dataDB['Authenticator']!=auth['Authenticator']:
+        or len(dataDB['Identity'])<1023 \
+        or dataDB['Identity']!=auth['Identity']:
             Statistics['AuthFailed']=Statistics.get('AuthFailed',0)+1
             return jsonStatus("BadPayload")
 
@@ -237,7 +233,6 @@ def ProcessPayload(data):
             if 'Name' in dataDB:    # Add the authentication
                 Locker[FileName]['Name']=dataDB['Name']
                 Locker[FileName]['Identity']=dataDB['Identity']
-                Locker[FileName]['Authenticator']=dataDB['Authenticator']
             Statistics['Lock']=Statistics.get('Lock',0)+1
             return jsonStatus("Locked",Locker[FileName]['ID'])
 
@@ -248,7 +243,6 @@ def ProcessPayload(data):
             if 'Name' in dataDB:    # Add the authentication
                 Locker[FileName]['Name']=dataDB['Name']
                 Locker[FileName]['Identity']=dataDB['Identity']
-                Locker[FileName]['Authenticator']=dataDB['Authenticator']
             Statistics['Expired']=Statistics.get('Expired',0)+1
             Statistics['Lock']=Statistics.get('Lock',0)+1
             return jsonStatus("Locked",Locker[FileName]['ID'])
@@ -331,7 +325,6 @@ def ProcessPayload(data):
             if 'Name' in dataDB:    # Add the authentication
                 Locker[FileName]['Name']=dataDB['Name']
                 Locker[FileName]['Identity']=dataDB['Identity']
-                Locker[FileName]['Authenticator']=dataDB['Authenticator']
             Statistics['PutNew']=Statistics.get('PutNew',0)+1
             Statistics['DataIn']=Statistics.get('DataIn',0)+len(dataDB['DataStore'])
             return jsonStatus("Done",Locker[FileName]['ID'])

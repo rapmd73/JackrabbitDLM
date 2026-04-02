@@ -31,15 +31,13 @@ def main():
         print("File already exists, aborting...")
         sys.exit(1)
 
-    len1=37
-    len2=73
     auth1=1023
     auth2=2047
 
-    astr={ "Identity":RandomString(len1,len2),"Authenticator":RandomString(auth1,auth2) }
+    astr={ "Identity":RandomString(auth1,auth2) }
 
     fh=open(fname,"w")
-    fh.write(f"{astr}\n")
+    fh.write(f"{json.dumps(astr)}\n")
     fh.close()
     print(f"{sys.argv[1]} written")
     return

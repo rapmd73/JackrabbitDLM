@@ -39,8 +39,7 @@ if not fw1.IsDLM():
 # Force authentication. This is NOT ideal for a 10 second lock.
 
 N='LockFighter'
-I='yJpTBe5iqTLAZ9o78mEBUHbQPx1ng8BRoxMArnRSFo1-F3djdDODuO-M8VP1'
-A='PGQL3NNKy8Un5gikm2HqmJA_GHbnG8EX_146O30J28itRAC5VAa7CTOsNHLPysgB9M4BfdHN-xN8Gro7im2MoYGPkYlni6_qIIDsivXbzEHcELamOOl5CWFArQn_BUejj7Bps7eMQrDL9ozad2qvtazZuVlWAHQ8Ow5Y9WXjDm9zgvkt7eYa4BNhJ82SAgYL1SlUty8hV6jIYSB8_qZhYtWcKaGoAtRaJnFBXN_9n2ZBcZ8wt1Q-ZIcdVVUCi7bix9Cp0owcsZj2gUaP_JrAWDZxVXz_ZbHuZkYo9aQqhnSbWwrXcwVaZHM6sNWfMg5bOpik2RSWQRsIsW3L9G7zzsVwOzrxkwWAPlo1ifu47LXA2PXFEmDLpbGHIwUyilLELjXRzo4Y5LxjtTJgMzsk2nBTw-49tDkgF-iMUQ-eBaOZ9b0ZgygJpH_c9p1Rh3aSWQ5DeLuWIseIUTgBB_WpaMPlhnLpqvG9X0I0RnimTy73_ySzZAhbCC6ltm1MY6D6sHuywM8mEU7FEw3S1kjVse7EkubdeLcfkkv1zuUPgnytbIWYrK-yhkKGF-9KB4sup9ls7o0dmdKySjWdS7OfV2SEiljPg82fgAr5Dy9QVXWzUUiSTReqMLQFC3w1z7HXyaILFkSRDE7HvZsukDhrXxO83G4H_5Botp2iVHHgrCM6X2jMpm4zTbxGxSin-seWt7cRid3j2founs9xh3IIb72vAlDA8iUDIdUdnfQPsveUHuLw8f7oBy87fqLCqgAjBZcsnfjiMT0oMEtrxMhlvyXnXdwjTBH2to9-WFe1psapsjz3fOXlGqFU8LGs-U3BknCQ6lZpJ90m8pzMWzzEgpGDHykPKomhQXVxPFaOZFI5nw1UF4IPuGvmVsfWQQR-upDWbRHgptHOJuRc7h4EFhFDIkTRrRtMIX3B1DEoSuun8B2vJfdSrjLJ_6E20c1pzGniQjvEZL_vr_eCu_sf2GSWZ_qlcAty7KBa-u0edyyqx3NCNp6IlqKYgqmeL9Otg_a51TuEdUo06ToqPdiVaBhBvNYMltNCVqPt95lHscdqYLhy8b0xD1XezkzIKH9wIrmrslOqIFe-RgchYGuKo82v3Axx25CFCLG6bS3zILTtBTIRPgEnURqMfJNzgo2LvvcHjqoqLDr_uQsj7FCEzegEh_Z02OmxbibCG2jXT9ycFXMIhu3QciYKgoSZffo_OsZRHFnnSCFD96X_8AFXOzqDej5TrL_x6ysxRljAfrLl_s5cMyOEtIbniC_b0HD8pFppCGJvCRfBeXHakkfqF8k4vuT_QBWGTOw3SJJ01uaug0nghh_6xljcSZzBK2OXns33hK2XLK7Euu0VFWK-ueyYUVmGu_89tlFWT9cl5QNxYbPOAWRPd6gzc9Tq3aHZn6vWvg1c9He8L1DVFESVSFakQFHfTrOT43RCsiTTQ4zmDeXhsI3UY0MbOMKOO9SehwKBDTwT-v3OOuprHFhmF99ypJSW5Hui8-T2yOMv1sQTkY1flLD1wZyqcAw6y1iDm-MBXBIWPpVrOj4PhO5-_1LnqLWUX-FvtSri1HPaZjy65ehQepamUS4AOZqGJvgMN_oAVHskguszq1Vlz2d9FsrjAdOxg6BLfI9x7PMQcbaFFVgl8XCQpe3pSE9eErWxIyIPk4wuGDHEVdk-xpiywpKaLC7MoX--HmymFsrVWatfULyi5lwlY2Z9Mqxqp2Xwg9HL3RxpJah_XeKhsTaEta6YeBJYnKA4JpiMpnmzeLNk8amiCYSBSOUUM3DwTk7ndz-p5sn6zpNbUovyrE2G-rBrgUxpbJm_SR6d_rCViq5JB3D_YR1MdJrkzu-VeBPfkz_JDpYTR7joDG5YOMSRCiB-bDqez86vi0MN3p7H86bvmKDaHrajsYRfxhMh77xhHNIh5hVVDRCXt9FTrXQ6A0S3vyRPBP9PT7jCCXzhQpoLwJuy-ERwuqwc6t9IM7-n2DRMu4M-mV9PKOEYahFY5CxYJr6T2LDdaykjOzin-UkxToIAeZAW-VKI1cTQfqhciJCAOg'
+I='PGQL3NNKy8Un5gikm2HqmJA_GHbnG8EX_146O30J28itRAC5VAa7CTOsNHLPysgB9M4BfdHN-xN8Gro7im2MoYGPkYlni6_qIIDsivXbzEHcELamOOl5CWFArQn_BUejj7Bps7eMQrDL9ozad2qvtazZuVlWAHQ8Ow5Y9WXjDm9zgvkt7eYa4BNhJ82SAgYL1SlUty8hV6jIYSB8_qZhYtWcKaGoAtRaJnFBXN_9n2ZBcZ8wt1Q-ZIcdVVUCi7bix9Cp0owcsZj2gUaP_JrAWDZxVXz_ZbHuZkYo9aQqhnSbWwrXcwVaZHM6sNWfMg5bOpik2RSWQRsIsW3L9G7zzsVwOzrxkwWAPlo1ifu47LXA2PXFEmDLpbGHIwUyilLELjXRzo4Y5LxjtTJgMzsk2nBTw-49tDkgF-iMUQ-eBaOZ9b0ZgygJpH_c9p1Rh3aSWQ5DeLuWIseIUTgBB_WpaMPlhnLpqvG9X0I0RnimTy73_ySzZAhbCC6ltm1MY6D6sHuywM8mEU7FEw3S1kjVse7EkubdeLcfkkv1zuUPgnytbIWYrK-yhkKGF-9KB4sup9ls7o0dmdKySjWdS7OfV2SEiljPg82fgAr5Dy9QVXWzUUiSTReqMLQFC3w1z7HXyaILFkSRDE7HvZsukDhrXxO83G4H_5Botp2iVHHgrCM6X2jMpm4zTbxGxSin-seWt7cRid3j2founs9xh3IIb72vAlDA8iUDIdUdnfQPsveUHuLw8f7oBy87fqLCqgAjBZcsnfjiMT0oMEtrxMhlvyXnXdwjTBH2to9-WFe1psapsjz3fOXlGqFU8LGs-U3BknCQ6lZpJ90m8pzMWzzEgpGDHykPKomhQXVxPFaOZFI5nw1UF4IPuGvmVsfWQQR-upDWbRHgptHOJuRc7h4EFhFDIkTRrRtMIX3B1DEoSuun8B2vJfdSrjLJ_6E20c1pzGniQjvEZL_vr_eCu_sf2GSWZ_qlcAty7KBa-u0edyyqx3NCNp6IlqKYgqmeL9Otg_a51TuEdUo06ToqPdiVaBhBvNYMltNCVqPt95lHscdqYLhy8b0xD1XezkzIKH9wIrmrslOqIFe-RgchYGuKo82v3Axx25CFCLG6bS3zILTtBTIRPgEnURqMfJNzgo2LvvcHjqoqLDr_uQsj7FCEzegEh_Z02OmxbibCG2jXT9ycFXMIhu3QciYKgoSZffo_OsZRHFnnSCFD96X_8AFXOzqDej5TrL_x6ysxRljAfrLl_s5cMyOEtIbniC_b0HD8pFppCGJvCRfBeXHakkfqF8k4vuT_QBWGTOw3SJJ01uaug0nghh_6xljcSZzBK2OXns33hK2XLK7Euu0VFWK-ueyYUVmGu_89tlFWT9cl5QNxYbPOAWRPd6gzc9Tq3aHZn6vWvg1c9He8L1DVFESVSFakQFHfTrOT43RCsiTTQ4zmDeXhsI3UY0MbOMKOO9SehwKBDTwT-v3OOuprHFhmF99ypJSW5Hui8-T2yOMv1sQTkY1flLD1wZyqcAw6y1iDm-MBXBIWPpVrOj4PhO5-_1LnqLWUX-FvtSri1HPaZjy65ehQepamUS4AOZqGJvgMN_oAVHskguszq1Vlz2d9FsrjAdOxg6BLfI9x7PMQcbaFFVgl8XCQpe3pSE9eErWxIyIPk4wuGDHEVdk-xpiywpKaLC7MoX--HmymFsrVWatfULyi5lwlY2Z9Mqxqp2Xwg9HL3RxpJah_XeKhsTaEta6YeBJYnKA4JpiMpnmzeLNk8amiCYSBSOUUM3DwTk7ndz-p5sn6zpNbUovyrE2G-rBrgUxpbJm_SR6d_rCViq5JB3D_YR1MdJrkzu-VeBPfkz_JDpYTR7joDG5YOMSRCiB-bDqez86vi0MN3p7H86bvmKDaHrajsYRfxhMh77xhHNIh5hVVDRCXt9FTrXQ6A0S3vyRPBP9PT7jCCXzhQpoLwJuy-ERwuqwc6t9IM7-n2DRMu4M-mV9PKOEYahFY5CxYJr6T2LDdaykjOzin-UkxToIAeZAW-VKI1cTQfqhciJCAOg'
 
 # Every fight gets a different write value frequency. Goal is chaos.
 wv=random.random()
@@ -56,7 +55,7 @@ while c<m:
         try:
             rn=random.random()
             if rn>.5:
-                Junker=DLM.Locker('Junker',name=N,identity=I,authenticator=A)
+                Junker=DLM.Locker('Junker',name=N,identity=I)
             else: # take the role of an attacker
                 Junker=DLM.Locker('Junker')
             # Consume
@@ -74,7 +73,7 @@ while c<m:
                     w+=1
                 # Make a random block of garbage that will be abandoned
                 if rn>0.5:
-                    Junker.Put(data=str(os.urandom(128*1024)),expire=5)
+                    Junker.Put(data=str(os.urandom(128*1024)),expire=2)
                 rn=random.random()
                 # Play nice and clean up.
                 if rn>0.75:
