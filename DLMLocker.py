@@ -26,7 +26,7 @@ import secrets
 
 class Locker:
     # Initialize the file name
-    def __init__(self, filename, Retry=7, RetrySleep=1, Timeout=300, ID=None, Host='', Port=37373, Encoder=None, Decoder=None):
+    def __init__(self, filename, Retry=7, RetrySleep=1, Timeout=300, ID=None, Host='', Port=37373, Encoder=None, Decoder=None, name=None, identity=None, authenticator=None):
         self.VERSION="0.0.0.1.380"
         self.ulResp=['badpayload','locked','unlocked','notowner','notfound','version']
 
@@ -46,6 +46,9 @@ class Locker:
             self.ID=self.GetID()
         else:
             self.ID=ID
+        self.name=name
+        self.identity=identity
+        self.authenticator=authenticator
         self.filename=filename
         self.retryLimit=Retry
         self.retrysleep=RetrySleep
@@ -103,37 +106,16 @@ class Locker:
             print(f"Error: {err}")
             return None
 
-    """
-    def Talker(self,msg,casefold=True):
-        try:
-            ls=socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            ls.setblocking(1)
-            ls.settimeout(self.timeout)
-            ls.connect((self.host, self.port))
-            sfn=ls.makefile('rw')
-            sfn.write(msg)
-            sfn.flush()
-            buf=None
-            end=time.time()+self.timeout
-            while buf==None and time.time()<end:
-                buf=sfn.readline()
-            ls.close()
-            if len(buf)!=0:
-                if casefold==True:
-                    return buf.lower().strip()
-                else:
-                    return buf.strip()
-            else:
-                return None
-        except Exception as err:
-            print("Error",err)
-            return None
-    """
     # Contact Lock server
 
     def Retry(self,action,expire,casefold=True):
         payload={ "ID":self.ID, "FileName":self.filename, "Action":action,
                   "Expire":str(expire) }
+
+        if self.name or self.identity or self.authenticator:
+            payload['Name']=self.name
+            payload['Identity']=self.identity
+            payload['Authenticator']=self.authenticator
 
         outbuf=json.dumps(payload)+'\n'
 
@@ -171,6 +153,11 @@ class Locker:
         payload={ "ID":self.ID, "FileName":self.filename, "Action":action,
                   "Expire":str(expire), "DataStore":data }
 
+        if self.name or self.identity or self.authenticator:
+            payload['Name']=self.name
+            payload['Identity']=self.identity
+            payload['Authenticator']=self.authenticator
+
         outbuf=json.dumps(payload)+'\n'
 
         retry=0
@@ -199,6 +186,11 @@ class Locker:
     def IsLocked(self,expire=300):
         payload={ "ID":self.ID, "FileName":self.filename, "Action":"Lock",
                   "Expire":str(expire) }
+
+        if self.name or self.identity or self.authenticator:
+            payload['Name']=self.name
+            payload['Identity']=self.identity
+            payload['Authenticator']=self.authenticator
 
         outbuf=json.dumps(payload)+'\n'
 

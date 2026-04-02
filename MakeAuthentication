@@ -1,0 +1,56 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+#
+# Jackrabbit DLM
+# 2021 Copyright © Robert APM Darin
+# All rights reserved unconditionally.
+
+import sys
+sys.path.append('/home/JackrabbitDLM')
+import os
+import json
+import time
+import random
+import secrets
+
+BaseDirectory="/home/JackrabbitDLM"
+ConfigDirectory=f"{BaseDirectory}/Config"
+
+def RandomString(len1,len2):
+    random.seed(time.time())
+    l=random.randrange(len1,len2)
+    return secrets.token_urlsafe(l)
+
+def main():
+    if len(sys.argv)<2:
+        print("Name not provided.")
+        sys.exit(1)
+
+    fname=f"{ConfigDirectory}/{sys.argv[1]}.cfg"
+    if os.path.exists(fname):
+        print("File already exists, aborting...")
+        sys.exit(1)
+
+    len1=37
+    len2=73
+    auth1=1023
+    auth2=2047
+
+    astr={ "Identity":RandomString(len1,len2),"Authenticator":RandomString(auth1,auth2) }
+
+    fh=open(fname,"w")
+    fh.write(f"{astr}\n")
+    fh.close()
+    print(f"{sys.argv[1]} written")
+    return
+
+###
+### Driver
+###
+
+if __name__=='__main__':
+    main()
+
+###
+### End
+###
