@@ -12,16 +12,8 @@
 # the actions specified (like locking or unlocking), and maintaining a record
 # of active locks and their expiration times.
 
-# When a user sends a request, the program checks if it’s valid and whether the
-# requester has permission to perform the action. If everything checks out, it
-# updates its records accordingly. The program also keeps track of various
-# statistics related to its operations, such as how many requests it has
-# handled or if there have been any errors.
-
-# Additionally, it logs important events for monitoring purposes and manages
-# memory efficiently by cleaning up expired locks or unused data. Overall, this
-# code serves as an efficient tool for coordinating access to shared resources
-# while ensuring that only authorized users can manipulate them.
+# REQUIRED AT ALL TIMES (see client library dor details:
+#   ID, FileName, Action, Expire
 
 # For (un)locking
 
@@ -44,7 +36,7 @@ import socket
 import select
 import json
 
-Version="0.0.0.1.500"
+Version="0.0.0.2.0"
 BaseDirectory="/home/JackrabbitDLM"
 ConfigDirectory=f"{BaseDirectory}/Config"
 LogDirectory=f"{BaseDirectory}/Logs"
@@ -62,12 +54,14 @@ Locker={}
 
 MaxBlockSize=4096
 
-# Maximum TTL required to force authentication
+# Maximum TTL required to force authentication. This will also be the threshold
+# for future persistent storage.
 
 MaxTTL=3543
 
-# Maximum megabytes allowed for the entire payload. Prevents memory
-# exhaustion (leaching) from malicious/bad program.
+# Maximum megabytes allowed for the entire payload. Prevents memory exhaustion
+# (leaching) from malicious/bad program. FUTURE CONSIDERATIONS: Limits differ
+# per authenticated entries.
 
 MaxPayloadSize=(10*1024*1024)
 
@@ -98,7 +92,7 @@ def ReadAuthentication(fn):
 
 def WritePID(port):
     fn=LogDirectory+'/'+str(port)+'.pid'
-    f = open(fn, "w")
+    f=open(fn, "w")
     f.write(str(os.getpid()))
     f.close()
 
@@ -400,17 +394,14 @@ def main():
     host=''
     port=37373
 
-    if len(sys.argv)>1:
+    if len(sys.argv) > 1:
         host=sys.argv[1]
-    if len(sys.argv)>2:
+    if len(sys.argv) > 2:
         port=int(sys.argv[2])
 
-    # Data storage for incoming payloads
     dataStore={}
-
-    WritePID(port)
-
-    # Open the port.
+    queue={}
+    sendBuffer={}
 
     try:
         lockerSocket=socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -419,140 +410,198 @@ def main():
         lockerSocket.listen(1024)
     except OSError as err:
         x=str(err)
-        if x.find('Address already in use')>-1:
+        if 'Address already in use' in x:
             x='Another program is using this port: '+str(port)
         WriteLog(x)
         sys.exit(1)
 
-    # Track incoming connections
+    WritePID(port)
 
-    inputs=[lockerSocket]
+    poller=select.poll()
+    fdmap={}
 
-    # Response queue connected to each client
-
-    queue={}
-
-    # The main loop of the program.
+    poller.register(lockerSocket, select.POLLIN)
+    fdmap[lockerSocket.fileno()]=lockerSocket
 
     while True:
-        infds,outfds,errfds=select.select(inputs, inputs, [], 30)
+        # 30 decond timeout for IDLE
+        events=poller.poll(30000)
 
-        if len(infds)!=0:
-            Statistics['AIn']=len(infds)
-            for fds in infds:
-                # Inbound requests processed
-                Statistics['In']=Statistics.get('In',0)+1
-                if fds is lockerSocket:
-                    # Get new connection
-                    clientsock,clientaddr=fds.accept()
+        if not events:
+            # Idle phase
+            Statistics['Idle']=Statistics.get('Idle', 0)+1
+            if MaxDataHoldSize > MaxPayloadSize:
+                # Force GC to clean
+                Statistics['ForcedGC']=Statistics.get('ForcedGC', 0)+1
+                MaxDataHoldSize=0
+                gc.collect()
+
+        # Track active in/out
+        actin=0
+        actout=0
+
+        # Event loop
+        for fd, event in events:
+            fds=fdmap.get(fd)
+            if fds is None:
+                continue
+
+            # New connection
+            if fds is lockerSocket:
+                try:
+                    clientsock, clientaddr=fds.accept()
                     clientsock.setblocking(0)
-                    if clientsock not in inputs:
-                        inputs.append(clientsock)
+
+                    poller.register(clientsock, select.POLLIN)
+                    fdmap[clientsock.fileno()]=clientsock
+
                     dataStore[clientsock]=''
-                else:
-                    data=None
+                    Statistics['Connections']=Statistics.get('Connections', 0)+1
+                except:
+                    continue
+
+            # Read event
+            elif event & select.POLLIN:
+                actin+=1
+                data=None
+                try:
+                    data=fds.recv(MaxBlockSize)
+                except:
+                    pass
+
+                if not data:
+                    if fds in dataStore:
+                        MaxDataHoldSize += len(dataStore[fds])
+                        dataStore.pop(fds, None)
+
+                    if fds in queue:
+                        queue.pop(fds, None)
+
+                    if fds in sendBuffer:
+                        sendBuffer.pop(fds, None)
+
+                    poller.unregister(fds)
+                    fdmap.pop(fd, None)
+                    fds.close()
+                    continue
+
+                if len(dataStore[fds])+len(data) > MaxPayloadSize:
+                    MaxDataHoldSize += len(dataStore.get(fds, ''))
+                    dataStore.pop(fds, None)
+                    queue.pop(fds, None)
+                    sendBuffer.pop(fds, None)
+
+                    poller.unregister(fds)
+                    fdmap.pop(fd, None)
+                    fds.close()
+
+                    Statistics['DataOverrun']=Statistics.get('DataOverrun', 0)+1
+                    continue
+
+                # I don't want bad connections tracked
+                Statistics['In']=Statistics.get('In', 0)+1
+
+                try:
+                    data=data.decode('utf-8')
+                except:
+                    continue
+
+                dataStore[fds] += data
+
+                if dataStore[fds][-1] == '\n':
+                    response=ProcessPayload(dataStore[fds])
+                    sendBuffer[fds]=response.encode('utf-8')
+                    poller.modify(fds, select.POLLOUT)
+
+            # Write event using send()
+            elif event & select.POLLOUT:
+                actout+=1
+                if fds in sendBuffer:
                     try:
-                        data=fds.recv(MaxBlockSize)
+                        sent=fds.send(sendBuffer[fds])
                     except:
-                        # Memory management when timeout
-                        gc.collect()
-                        # Sleep based upon server load
-                        Statistics['Idle']=Statistics.get('Idle',0)+1
-                        time.sleep(1)
+                        sent=0
 
-                    # No data received, close connection, clean up and sleep
+                    if sent > 0:
+                        sendBuffer[fds]=sendBuffer[fds][sent:]
 
-                    if not data or data==None:
+                    # If all data sent, close connection (same behavior as original)
+                    if not sendBuffer[fds]:
+                        sendBuffer.pop(fds, None)
+
                         if fds in dataStore:
-                            MaxDataHoldSize+=len(dataStore[fds])
-                            dataStore.pop(fds,None)
-                        if fds in inputs:
-                            inputs.remove(fds)
-                        if fds in queue:
-                            queue.pop(fds,None)
+                            MaxDataHoldSize += len(dataStore[fds])
+                            dataStore.pop(fds, None)
+
+                        poller.unregister(fds)
+                        fdmap.pop(fd, None)
                         fds.close()
-                    else:
-                        # Sanity check to prevent memory exhaustion
-                        # Potential attack
-                        if len(dataStore[fds])+len(data)>MaxPayloadSize:
-                            if fds in dataStore:
-                                MaxDataHoldSize+=len(dataStore[fds])
-                                dataStore.pop(fds,None)
-                            if fds in inputs:
-                                inputs.remove(fds)
-                            if fds in queue:
-                                queue.pop(fds,None)
-                            fds.close()
-                            Statistics['DataOverrun']=Statistics.get('DataOverrun',0)+1
-                            continue
 
-                        # Collect the entire line.
-                        try:
-                            data=data.decode('utf-8')
-                        except:
-                            continue
-                        dataStore[fds]+=data
-                        # One and ONLY one request allowed
-                        if dataStore[fds][-1]=='\n':
-                            queue[fds]=ProcessPayload(dataStore[fds])
+                        Statistics['Out']=Statistics.get('Out', 0)+1
 
-        # Send response and close connection
+            # Error / hangup
+            elif event & (select.POLLHUP | select.POLLERR):
+                Statistics['BadConn']=Statistics.get('BadConn', 0)+1
+                if fds in dataStore:
+                    MaxDataHoldSize += len(dataStore[fds])
+                    dataStore.pop(fds, None)
 
-        if len(outfds)!=0:
-            Statistics['AOut']=len(outfds)
-            for fds in outfds:
-                # Outbound requests processed
-                Statistics['Out']=Statistics.get('Out',0)+1
                 if fds in queue:
-                    try:
-                        fds.setblocking(1)
-                        fds.sendall(queue[fds].encode())
-                    except:
-                        if fds in dataStore:
-                            MaxDataHoldSize+=len(dataStore[fds])
-                            dataStore.pop(fds,None)
-                        if fds in inputs:
-                            inputs.remove(fds)
-                        fds.close()
-                    queue.pop(fds,None)
+                    queue.pop(fds, None)
 
-        # Clean up memory list
+                if fds in sendBuffer:
+                    sendBuffer.pop(fds, None)
 
-        # Active Locks/Data
+                poller.unregister(fds)
+                fdmap.pop(fd, None)
+                fds.close()
+
+        # Active in/out events
+        Statistics['AIn']=actin
+        Statistics['AOut']=actout
+
+        # Cleanup expired locks/data and track only active locks/data
         Statistics['ALock']=0
         Statistics['AData']=0
 
+        # Purge expired
         now=time.time()
         for k in list(Locker):
-            if now>Locker[k]['Expire']:
+            if now > Locker[k]['Expire']:
                 if 'DataStore' in Locker[k]:
                     if Locker[k]['DataStore'] is not None:
-                        MaxDataHoldSize+=len(Locker[k]['DataStore'])
+                        MaxDataHoldSize += len(Locker[k]['DataStore'])
                         Locker[k]['DataStore']=None
-                    Statistics['ExpiredData']=Statistics.get('ExpiredData',0)+1
+                    Statistics['ExpiredData']=Statistics.get('ExpiredData', 0)+1
                 else:
-                    Statistics['ExpiredLock']=Statistics.get('ExpiredLock',0)+1
-                Locker.pop(k,None)
-            # For accuracy, must be after possible removal, Active
+                    Statistics['ExpiredLock']=Statistics.get('ExpiredLock', 0)+1
+                Locker.pop(k, None)
+
+            # Count the active enty only
             if k in Locker:
                 if 'DataStore' in Locker[k]:
-                    Statistics['AData']+=1
+                    Statistics['AData'] += 1
                 else:
-                    Statistics['ALock']+=1
+                    Statistics['ALock'] += 1
 
+        # Log the statistics
         ct=datetime.now()
-        if ct.hour!=OldHour and len(Statistics)>0:
+        if ct.hour != OldHour and len(Statistics)>0:
             OldHour=ct.hour
-
             s=', '.join(f"{k}: {v}" for k,v in sorted(Statistics.items()) if v>0)
             WriteLog(s)
             Statistics={}
 
-        # Long term memory management
+        # Check for a foced GC run. Keep the system as lean as possible.
         if MaxDataHoldSize>MaxPayloadSize:
-            Statistics['ForcedGC']=Statistics.get('ForcedGC',0)+1
+            # Force GC to clean
+            Statistics['ForcedGC']=Statistics.get('ForcedGC', 0)+1
             MaxDataHoldSize=0
             gc.collect()
+
+###
+### Main driver
+###
 
 if __name__ == '__main__':
     main()
