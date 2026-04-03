@@ -508,7 +508,7 @@ def main():
 
                 dataStore[fds] += data
 
-                if dataStore[fds][-1] == '\n':
+                if dataStore[fds] and dataStore[fds].endswith('\n'):
                     response=ProcessPayload(dataStore[fds])
                     sendBuffer[fds]=response.encode('utf-8')
                     poller.modify(fds, select.POLLOUT)
