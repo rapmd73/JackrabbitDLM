@@ -53,11 +53,6 @@ while c<m:
 
     if rl=='locked':
         try:
-            rn=random.random()
-            if rn>.5:
-                Junker=DLM.Locker('Junker',name=N,identity=I)
-            else: # take the role of an attacker
-                Junker=DLM.Locker('Junker')
             # Consume
             sData=Memory.Get()
             r+=1
@@ -71,17 +66,25 @@ while c<m:
                     c+=1
                     Memory.Put(data=str(c),expire=10)
                     w+=1
-                # Make a random block of garbage that will be abandoned
-                if rn>0.5:
-                    Junker.Put(data=str(os.urandom(128*1024)),expire=10)
-                rn=random.random()
-                # Play nice and clean up.
-                if rn>0.75:
-                    Junker.Erase()
             # If not found, create it
             else:
                 Memory.Put(data=str(c),expire=10)
                 w+=1
+
+            # Random Junk
+            rn=random.random()
+            if rn>.5:
+                Junker=DLM.Locker('Junker:'+fw1.GetID(),name=N,identity=I)
+            else: # take the role of an attacker
+                Junker=DLM.Locker('Junker'+fw1.GetID())
+                # Make a random block of garbage that will be abandoned
+                if rn>0.5:
+                    Junker.Put(data=str(os.urandom(random.randint(96,256)*1024)),expire=10)
+                rn=random.random()
+                # Play nice and clean up.
+                if rn>0.75:
+                    Junker.Erase()
+
             s+=1
         except Exception as err:
             f+=1

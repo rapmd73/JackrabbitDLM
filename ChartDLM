@@ -39,7 +39,10 @@ lines=FF.ReadFile(DLMlogs).strip().split('\n')
 Dates={}
 
 for line in lines:
-    if 'Jackrabbit DLM' in line:
+    if 'Jackrabbit DLM' in line \
+    or 'Another program is using this port' in line \
+    or 'Errno' in line \
+    or 'Error' in line:
         continue
 
     data=line.split(' ')
