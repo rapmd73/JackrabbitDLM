@@ -56,6 +56,7 @@ class Locker:
         self.host=Host
         if self.host=='':
             self.host='127.0.0.1'
+        self.Error=None
 
     def dlmEncode(self,data_bytes):
         if isinstance(data_bytes, str):
@@ -78,6 +79,7 @@ class Locker:
     # Contact the Locker Server and WAIT for response. NOT thread safe.
 
     def Talker(self, msg, casefold=True):
+        self.Error=None
         try:
             # 1. create_connection() handles the 115 error internally.
             # It blocks ONLY until connected or self.timeout is hit.
@@ -102,7 +104,7 @@ class Locker:
             return None
 
         except (socket.timeout, OSError) as err:
-            print(f"Error: {err}")
+            self.Error=str(err)
             return None
 
     # Contact Lock server

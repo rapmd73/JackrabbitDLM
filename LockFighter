@@ -18,15 +18,22 @@ m=1000
 if len(sys.argv)>1:
     m=int(sys.argv[1])
 
+ws=len(str(m))  # Width of string for pretty printing
+
 RetryLocker=True
-if len(sys.argv)>2:
+if 'aggressive' in sys.argv:
     RetryLocker=False
+
+TestMemory=True
+if 'locks' in sys.argv:
+    TestMemory=False
 
 c=0     # Memory counter
 f=0     # Failed locks
 s=0     # Successful locks
 r=0     # Reads
 w=0     # Writes
+k=0     # Connection killed, payload too large
 
 # Connection timeout is 10 seconds
 fw1=DLM.Locker("LockerTest",Timeout=10,Retry=0)
@@ -45,64 +52,77 @@ I='PGQL3NNKy8Un5gikm2HqmJA_GHbnG8EX_146O30J28itRAC5VAa7CTOsNHLPysgB9M4BfdHN-xN8G
 wv=random.random()
 stime=time.time()
 while c<m:
-    rl=None
-    if RetryLocker:
-        rl=fw1.Lock(expire=10)       # Retry framework
-    else:
-        rl=fw1.IsLocked(expire=10)   # Hyper aggressive, no retry
+    try:
+        rl=None
+        if RetryLocker:
+            rl=fw1.Lock(expire=10)       # Retry framework
+        else:
+            rl=fw1.IsLocked(expire=10)   # Hyper aggressive, no retry
 
-    if rl=='locked':
-        try:
-            # Consume
-            sData=Memory.Get()
-            r+=1
-            # If found, increment
-            if 'DataStore' in sData:
-                c=int(sData['DataStore'])
+        if rl=='locked':
+            try:
+                # Consume
+                sData=Memory.Get()
+                r+=1
+                # If found, increment
+                if 'DataStore' in sData:
+                    c=int(sData['DataStore'])
 
-                # Write (produce) 25% of the time
-                rn=random.random()
-                if c<m and rn>round(wv,2):
-                    c+=1
+                    # Write (produce) 25% of the time
+                    rn=random.random()
+                    if c<m and rn>round(wv,2):
+                        c+=1
+                        Memory.Put(data=str(c),expire=10)
+                        w+=1
+                # If not found, create it
+                else:
                     Memory.Put(data=str(c),expire=10)
                     w+=1
-            # If not found, create it
-            else:
-                Memory.Put(data=str(c),expire=10)
-                w+=1
 
-            # Random Junk
-            rn=random.random()
-            if rn>.5:
-                Junker=DLM.Locker('Junker:'+fw1.GetID(),name=N,identity=I)
-            else: # take the role of an attacker
-                Junker=DLM.Locker('Junker'+fw1.GetID())
-                # Make a random block of garbage that will be abandoned
-                if rn>0.5:
-                    Junker.Put(data=str(os.urandom(random.randint(96,256)*1024)),expire=10)
-                rn=random.random()
-                # Play nice and clean up.
-                if rn>0.75:
-                    Junker.Erase()
-
-            s+=1
-        except Exception as err:
+                # Random Junk
+                if TestMemory:
+                    rn=random.random()
+                    if rn>.5:
+                        # Provide identity for large payload requirements
+                        Junker=DLM.Locker('Junker:'+fw1.GetID(),name=N,identity=I)
+                    else: # take the role of an attacker, no identity
+                        Junker=DLM.Locker('Junker'+fw1.GetID())
+                        # Make a random block of garbage that will be abandoned
+                        if rn>0.25:
+                            # The block should test Jackrabbit DLM's ability to
+                            # require block size identty.
+                            Junker.Put(data=str(os.urandom(random.randint(96,512)*1024)),expire=10)
+                            if Junker.Error:
+                                k+=1
+                        rn=random.random()
+                        # Play nice and clean up.
+                        if rn>0.75:
+                            Junker.Erase()
+                s+=1
+            except Exception as err:
+                f+=1
+                if RetryLocker:
+                    time.sleep(0.1)
+            fw1.Unlock()
+        else:
             f+=1
-            print(err)
             if RetryLocker:
                 time.sleep(0.1)
-        fw1.Unlock()
-    else:
+    except Exception as err:
         f+=1
         if RetryLocker:
             time.sleep(0.1)
 
-# A proper program would use some kind of a waiting period to play nice with the CPU.
-#    time.sleep(0.1)
+    # A proper program would use some kind of a waiting period to play nice with
+    # the CPU.
+
+    if RetryLocker:
+        time.sleep(0.1)
 
 etime=time.time()
+
 # contention rate
 cr=0
 if f>0:
     cr=round((f/(s+f))*100,2)
-print(str(RetryLocker)[0],os.getpid(),f"{etime-stime:.8f}",f,s,r,w,cr,c)
+print(f"{str(RetryLocker)[0]} {os.getpid():8} {etime-stime:.8f} {f:{ws}} {s:{ws}} {r:{ws}} {w:{ws}} {cr:.2f} {k} {c}")

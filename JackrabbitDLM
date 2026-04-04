@@ -63,7 +63,7 @@ MaxTTL=3543
 # (leaching) from malicious/bad program. FUTURE CONSIDERATIONS: Limits differ
 # per authenticated entries.
 
-MaxPayloadSize=(10*1024*1024)
+MaxPayloadSize=(1*1024*1024)
 
 # This will determine when to force a full gc collect based upon the
 # memory actually deleted.
@@ -72,7 +72,7 @@ MaxDataHoldSize=0
 
 # Read authentication file from disk
 
-def ReadAuthentication(fn):
+def ReadIdentity(fn):
     fname=f"{ConfigDirectory}/{fn}.cfg"
     if os.path.exists(fname):
         cf=open(fname,'r')
@@ -121,6 +121,16 @@ def jsonStatus(str,id=None,Tag=None,Data=None):
 
     return json.dumps(res)+'\n'
 
+# Is it a number?
+
+def NumberOnly(s):
+    try:
+        x=float(s)
+        return True
+    except:
+        return False
+    return False
+
 # Check the authentication
 
 def CheckIdentity(dataDB,LockDB):
@@ -164,7 +174,8 @@ def ProcessPayload(data):
     if 'FileName' not in dataDB \
     or 'Action' not in dataDB \
     or 'ID' not in dataDB \
-    or 'Expire' not in dataDB:
+    or 'Expire' not in dataDB \
+    or not NumberOnly(dataDB['Expire']):
         Statistics['BadPayload']=Statistics.get('BadPayload',0)+1
         return jsonStatus("BadPayload")
 
@@ -188,7 +199,7 @@ def ProcessPayload(data):
         return jsonStatus("BadPayload")
 
     if 'Name' in dataDB:
-        auth=ReadAuthentication(dataDB['Name'])
+        auth=ReadIdentity(dataDB['Name'])
 
         # All the ways it can fail.
         if auth is None \
@@ -200,11 +211,12 @@ def ProcessPayload(data):
             return jsonStatus("BadPayload")
 
     # Valid actions:
-    #    Lock
-    #    Unlock
-    #    Get
-    #    Put        Only this command allows a DataStore in the payload
-    #    Erase
+    #   Lock
+    #   Unlock
+    #   Get
+    #   Put
+    #   Erase
+    #   Version
 
     # With what we are doing. FileName also doubles as memory ID
     FileName=dataDB['FileName']
