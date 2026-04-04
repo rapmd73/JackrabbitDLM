@@ -36,7 +36,7 @@ import socket
 import select
 import json
 
-Version="0.0.0.2.0"
+Version="0.0.0.2.20"
 BaseDirectory="/home/JackrabbitDLM"
 ConfigDirectory=f"{BaseDirectory}/Config"
 LogDirectory=f"{BaseDirectory}/Logs"
@@ -63,7 +63,8 @@ MaxTTL=3543
 # (leaching) from malicious/bad program. FUTURE CONSIDERATIONS: Limits differ
 # per authenticated entries.
 
-MaxPayloadSize=(1*1024*1024)
+MaxPayloadSize=(10*1024*1024)
+MaxDataStoreSize=(16*1024)
 
 # This will determine when to force a full gc collect based upon the
 # memory actually deleted.
@@ -86,6 +87,10 @@ def ReadIdentity(fn):
             buffer=None
     else:
         buffer=None
+    if 'MaxSize' not in buffer:
+        buffer['MaxSize']=MaxDataStoreSize
+    elif not NumberOnly(buffer['MaxSize']):
+        buffer['MaxSize']=MaxDataStoreSize
     return buffer
 
 # Write pid in port file
@@ -179,25 +184,37 @@ def ProcessPayload(data):
         Statistics['BadPayload']=Statistics.get('BadPayload',0)+1
         return jsonStatus("BadPayload")
 
-    # Verify any additional security layers.
+    # Verify any additional security layers. Identity is OPTIONAL, with the
+    # following exceptions:
+    #   1. Expiration > specified limit
+    #   2. DataStore size > specified limit
     #
     # Checks:
     #   1. If "Name" is in the payload, then read the file (name.cfg)
     #   2. Verify "Identidy" string match. REQUIRED if
     #      "Name" is present.
-    #   3. if "Expire" > 3543, force required authentiion
     #
     # If veryify fails, return only BadPayload... No authentication leaking.
     #
     # If you are crazy enough to use authentication for a lock/data that lasts
     # seconds to minutes, then these requirements are nothing to worry about.
-
+    #
     # Authentication REQUIRED for long term data storage.
 
+    # Check the DataStore for this entrys
+
+    # Check allowed anonymous size
+    if 'DataStore' in dataDB and 'Name' not in dataDB:
+        if dataDB['DataStore'] and len(dataDB['DataStore'])>MaxDataStoreSize:
+            Statistics['AuthFailed']=Statistics.get('AuthFailed',0)+1
+            return jsonStatus("BadPayload")
+
+    # Force check expire
     if float(dataDB['Expire'])>MaxTTL and 'Name' not in dataDB:
         Statistics['AuthFailed']=Statistics.get('AuthFailed',0)+1
         return jsonStatus("BadPayload")
 
+    MaxSize=MaxDataStoreSize
     if 'Name' in dataDB:
         auth=ReadIdentity(dataDB['Name'])
 
@@ -209,6 +226,8 @@ def ProcessPayload(data):
         or dataDB['Identity']!=auth['Identity']:
             Statistics['AuthFailed']=Statistics.get('AuthFailed',0)+1
             return jsonStatus("BadPayload")
+
+        MaxSize=aith['MaxSize']
 
     # Valid actions:
     #   Lock
@@ -311,6 +330,11 @@ def ProcessPayload(data):
         # New memory object
         if FileName not in Locker \
         or time.time()>Locker[FileName]['Expire']:
+            # Force maximum size limit
+            if len(dataDB['DataStore'])>MaxSize:
+                Statistics['BadPayload']=Statistics.get('BadPayload',0)+1
+                return jsonStatus("BadPayload")
+
             dStore={}
             dStore['ID']=dataDB['ID']
             dStore['Expire']=time.time()+float(dataDB['Expire'])
@@ -330,6 +354,11 @@ def ProcessPayload(data):
                 # Lock access by a non-owner ID
                 Statistics['NotOwner']=Statistics.get('NotOwner',0)+1
                 return jsonStatus("NotOwner")
+
+            # Force maximum size limit
+            if len(dataDB['DataStore'])>MaxSize:
+                Statistics['BadPayload']=Statistics.get('BadPayload',0)+1
+                return jsonStatus("BadPayload")
 
             Locker[FileName]['Expire']=time.time()+float(dataDB['Expire'])
             Locker[FileName]['DataStore']=dataDB['DataStore']

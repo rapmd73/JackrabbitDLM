@@ -20,6 +20,10 @@ if len(sys.argv)>1:
 
 ws=len(str(m))  # Width of string for pretty printing
 
+Chaos=False
+if 'chaos' in sys.argv:
+    Chaos=True
+
 RetryLocker=True
 if 'aggressive' in sys.argv:
     RetryLocker=False
@@ -53,6 +57,13 @@ wv=random.random()
 stime=time.time()
 while c<m:
     try:
+        if Chaos:
+            rn=random.random()
+            if rn>.5:
+                RetryLocker=True
+            else:
+                RetryLocker=False
+
         rl=None
         if RetryLocker:
             rl=fw1.Lock(expire=10)       # Retry framework
@@ -125,4 +136,4 @@ etime=time.time()
 cr=0
 if f>0:
     cr=round((f/(s+f))*100,2)
-print(f"{str(RetryLocker)[0]} {os.getpid():8} {etime-stime:.8f} {f:{ws}} {s:{ws}} {r:{ws}} {w:{ws}} {cr:.2f} {k} {c}")
+print(f"{str(RetryLocker)[0]} {os.getpid():8} {etime-stime:.8f} {f:{ws}} {s:{ws}} {r:{ws}} {w:{ws}} {cr:.2f} {k:{ws}} {c}")
