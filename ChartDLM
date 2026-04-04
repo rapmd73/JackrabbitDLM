@@ -85,6 +85,8 @@ traces = []
 for field in sorted(fields):
     yraw=[Dates[dt].get(field,0) for dt in dates]
     y=[math.log(v+1) for v in yraw]
+    if ih=='h':
+        y=yraw
     traces.append(go.Scatter(x=dates, y=y, mode='lines', name=field))
 
 # Create and save figure

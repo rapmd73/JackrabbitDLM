@@ -123,7 +123,7 @@ def jsonStatus(str,id=None,Tag=None,Data=None):
 
 # Check the authentication
 
-def CheckAuthentication(dataDB,LockDB):
+def CheckIdentity(dataDB,LockDB):
     # If name is in one or the other, fail.
 
     if ('Name' in dataDB and 'Name' not in LockDB) \
@@ -135,7 +135,6 @@ def CheckAuthentication(dataDB,LockDB):
     if 'Name' in LockDB:
         if 'Name' not in dataDB \
         or 'Identity' not in dataDB \
-        or 'Authenticator' not in dataDB \
         or dataDB['Name']!=LockDB['Name'] \
         or dataDB['Identity']!=LockDB['Identity']:
             return False
@@ -173,7 +172,7 @@ def ProcessPayload(data):
     #
     # Checks:
     #   1. If "Name" is in the payload, then read the file (name.cfg)
-    #   2. Verify "Identidy" and "Authenticator" string match. REQUIRED if
+    #   2. Verify "Identidy" string match. REQUIRED if
     #      "Name" is present.
     #   3. if "Expire" > 3543, force required authentiion
     #
@@ -194,9 +193,7 @@ def ProcessPayload(data):
         # All the ways it can fail.
         if auth is None \
         or 'Identity' not in dataDB \
-        or 'Authenticator' not in dataDB \
         or 'Identity' not in auth \
-        or 'Authenticator' not in auth \
         or len(dataDB['Identity'])<1023 \
         or dataDB['Identity']!=auth['Identity']:
             Statistics['AuthFailed']=Statistics.get('AuthFailed',0)+1
@@ -219,7 +216,8 @@ def ProcessPayload(data):
 
     if action=='lock':
         # New lock request
-        if FileName not in Locker:
+        if FileName not in Locker \
+        or time.time()>Locker[FileName]['Expire']:
             dataLock={}
             dataLock['ID']=dataDB['ID']
             dataLock['Expire']=time.time()+float(dataDB['Expire'])
@@ -230,20 +228,9 @@ def ProcessPayload(data):
             Statistics['Lock']=Statistics.get('Lock',0)+1
             return jsonStatus("Locked",Locker[FileName]['ID'])
 
-        # Lock has expired, now unlocked
-        if time.time()>Locker[FileName]['Expire']:
-            Locker[FileName]['ID']=dataDB['ID'] # assign the new ID
-            Locker[FileName]['Expire']=time.time()+float(dataDB['Expire'])
-            if 'Name' in dataDB:    # Add the authentication
-                Locker[FileName]['Name']=dataDB['Name']
-                Locker[FileName]['Identity']=dataDB['Identity']
-            Statistics['Expired']=Statistics.get('Expired',0)+1
-            Statistics['Lock']=Statistics.get('Lock',0)+1
-            return jsonStatus("Locked",Locker[FileName]['ID'])
-
         # The current owner want the lock reset to a specific duration/held longer
         if Locker[FileName]['ID']==dataDB['ID']:
-            if not CheckAuthentication(dataDB,Locker[FileName]):
+            if not CheckIdentity(dataDB,Locker[FileName]):
                 # Lock access by a non-owner ID
                 Statistics['NotOwner']=Statistics.get('NotOwner',0)+1
                 return jsonStatus("NotOwner")
@@ -264,7 +251,7 @@ def ProcessPayload(data):
 
         # Verify owner and unlock
         if Locker[FileName]['ID']==dataDB['ID']:
-            if not CheckAuthentication(dataDB,Locker[FileName]):
+            if not CheckIdentity(dataDB,Locker[FileName]):
                 # Lock access by a non-owner ID
                 Statistics['NotOwner']=Statistics.get('NotOwner',0)+1
                 return jsonStatus("NotOwner")
@@ -287,7 +274,7 @@ def ProcessPayload(data):
 
         # Verify owner of data
         if Locker[FileName]['ID']==dataDB['ID'] and time.time()<=Locker[FileName]['Expire']:
-            if not CheckAuthentication(dataDB,Locker[FileName]):
+            if not CheckIdentity(dataDB,Locker[FileName]):
                 # Lock access by a non-owner ID
                 Statistics['NotOwner']=Statistics.get('NotOwner',0)+1
                 return jsonStatus("NotOwner")
@@ -310,7 +297,8 @@ def ProcessPayload(data):
             return jsonStatus("BadPayload")
 
         # New memory object
-        if FileName not in Locker:
+        if FileName not in Locker \
+        or time.time()>Locker[FileName]['Expire']:
             dStore={}
             dStore['ID']=dataDB['ID']
             dStore['Expire']=time.time()+float(dataDB['Expire'])
@@ -324,8 +312,9 @@ def ProcessPayload(data):
             return jsonStatus("Done",Locker[FileName]['ID'])
 
         # Existing memory object, verify owner and reset expiration timeout
+        # Data is strange case. it is either erared or expired by main loop.
         if Locker[FileName]['ID']==dataDB['ID']:
-            if not CheckAuthentication(dataDB,Locker[FileName]):
+            if not CheckIdentity(dataDB,Locker[FileName]):
                 # Lock access by a non-owner ID
                 Statistics['NotOwner']=Statistics.get('NotOwner',0)+1
                 return jsonStatus("NotOwner")
@@ -355,7 +344,7 @@ def ProcessPayload(data):
         # Verify owner and erase memory. Erase is just resetting expiration to 0.
         # Will be remove in main function.
         if Locker[FileName]['ID']==dataDB['ID']:
-            if not CheckAuthentication(dataDB,Locker[FileName]):
+            if not CheckIdentity(dataDB,Locker[FileName]):
                 # Lock access by a non-owner ID
                 Statistics['NotOwner']=Statistics.get('NotOwner',0)+1
                 return jsonStatus("NotOwner")
