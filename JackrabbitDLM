@@ -87,9 +87,9 @@ def ReadIdentity(fn):
             buffer=None
     else:
         buffer=None
-    if 'MaxSize' not in buffer:
+    if buffer and 'MaxSize' not in buffer:
         buffer['MaxSize']=MaxDataStoreSize
-    elif not NumberOnly(buffer['MaxSize']):
+    if buffer and not NumberOnly(buffer['MaxSize']):
         buffer['MaxSize']=MaxDataStoreSize
     return buffer
 
@@ -227,7 +227,7 @@ def ProcessPayload(data):
             Statistics['AuthFailed']=Statistics.get('AuthFailed',0)+1
             return jsonStatus("BadPayload")
 
-        MaxSize=aith['MaxSize']
+        MaxSize=auth['MaxSize']
 
     # Valid actions:
     #   Lock
@@ -430,7 +430,6 @@ def main():
         port=int(sys.argv[2])
 
     dataStore={}
-    queue={}
     sendBuffer={}
 
     try:
@@ -504,9 +503,6 @@ def main():
                         MaxDataHoldSize += len(dataStore[fds])
                         dataStore.pop(fds, None)
 
-                    if fds in queue:
-                        queue.pop(fds, None)
-
                     if fds in sendBuffer:
                         sendBuffer.pop(fds, None)
 
@@ -518,7 +514,6 @@ def main():
                 if len(dataStore[fds])+len(data) > MaxPayloadSize:
                     MaxDataHoldSize += len(dataStore.get(fds, ''))
                     dataStore.pop(fds, None)
-                    queue.pop(fds, None)
                     sendBuffer.pop(fds, None)
 
                     poller.unregister(fds)
@@ -575,9 +570,6 @@ def main():
                 if fds in dataStore:
                     MaxDataHoldSize += len(dataStore[fds])
                     dataStore.pop(fds, None)
-
-                if fds in queue:
-                    queue.pop(fds, None)
 
                 if fds in sendBuffer:
                     sendBuffer.pop(fds, None)
