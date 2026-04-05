@@ -40,7 +40,7 @@ w=0     # Writes
 k=0     # Connection killed, payload too large
 
 # Connection timeout is 10 seconds
-fw1=DLM.Locker("LockerTest",Timeout=10,Retry=0,Port=23232)
+fw1=DLM.Locker("LockerTest",Timeout=10,Retry=0)
 Memory=DLM.Locker('LockFighter',ID='LockFighterMemory')
 
 if not fw1.IsDLM():
