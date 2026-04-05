@@ -27,7 +27,7 @@ import secrets
 class Locker:
     # Initialize the file name
     def __init__(self, filename, Retry=7, RetrySleep=1, Timeout=300, ID=None, Host='', Port=37373, Encoder=None, Decoder=None, name=None, identity=None):
-        self.VERSION="0.0.0.1.380"
+        self.VERSION="0.0.0.1.530"
         self.ulResp=['badpayload','locked','unlocked','notowner','notfound','version']
 
         # Encoding String
@@ -59,9 +59,10 @@ class Locker:
         self.Error=None
 
     def dlmEncode(self,data_bytes):
+        if isinstance(data_bytes, dict):
+            data_bytes = json.dumps(data_bytes)
         if isinstance(data_bytes, str):
             data_bytes = data_bytes.encode('utf-8')
-
         return "".join(self.ENCODE_TABLE[b] for b in data_bytes)
 
     def dlmDecode(self,encoded_str):
@@ -81,6 +82,11 @@ class Locker:
     def Talker(self, msg, casefold=True):
         self.Error=None
         try:
+            # Encode the payload.  This is NOT security, it is just keeping pain
+            # text invisible.
+
+            payload=self.dlmEncode(msg)
+
             # 1. create_connection() handles the 115 error internally.
             # It blocks ONLY until connected or self.timeout is hit.
             ls = socket.create_connection((self.host, self.port), timeout=self.timeout)
@@ -88,15 +94,18 @@ class Locker:
             # 2. Use makefile for easy line-based reading.
             sfn = ls.makefile('rw', buffering=1)
 
-            sfn.write(msg + '\n') # Ensure newline for readline to work
+            sfn.write(payload + '\n') # Ensure newline for readline to work
             sfn.flush()
 
             # 3. No while loop needed; readline() respects the socket timeout.
-            buf = sfn.readline()
+            payload = sfn.readline()
 
             # 4. Clean up before returning
             sfn.close()
             ls.close()
+
+            # Decode the entire payload
+            buf=self.dlmDecode(payload.strip())
 
             if buf:
                 res = buf.strip()
@@ -117,7 +126,7 @@ class Locker:
             payload['Name']=self.name
             payload['Identity']=self.identity
 
-        outbuf=json.dumps(payload)+'\n'
+        outbuf=json.dumps(payload)
 
         retry=0
         done=False
@@ -157,7 +166,7 @@ class Locker:
             payload['Name']=self.name
             payload['Identity']=self.identity
 
-        outbuf=json.dumps(payload)+'\n'
+        outbuf=json.dumps(payload)
 
         retry=0
         done=False
@@ -190,7 +199,7 @@ class Locker:
             payload['Name']=self.name
             payload['Identity']=self.identity
 
-        outbuf=json.dumps(payload)+'\n'
+        outbuf=json.dumps(payload)
 
         buf=self.Talker(outbuf,casefold=True)
         if buf==None:

@@ -12,8 +12,12 @@
 # the actions specified (like locking or unlocking), and maintaining a record
 # of active locks and their expiration times.
 
-# REQUIRED AT ALL TIMES (see client library dor details:
+# REQUIRED AT ALL TIMES (see client library for details:
 #   ID, FileName, Action, Expire
+
+# DataStore MUST ALWAYS be a PRINTABLE string with NO escaped characters.  This
+# is a design choice to allow portability and provide a DLM that can work with
+# ANY framework or language.
 
 # For (un)locking
 
@@ -36,7 +40,7 @@ import socket
 import select
 import json
 
-Version="0.0.0.2.20"
+Version="0.0.0.2.120"
 BaseDirectory="/home/JackrabbitDLM"
 ConfigDirectory=f"{BaseDirectory}/Config"
 LogDirectory=f"{BaseDirectory}/Logs"
@@ -71,6 +75,36 @@ MaxDataStoreSize=(16*1024)
 
 MaxDataHoldSize=0
 
+# Encoding String, different order=different output, reasonable for a 10 second lock
+ALPHABET='1aA2bB3cC4dD5eE6fF7gG8hH9iI0jJ!kK@lL#mM$nN%oO^pP&qQ*rR(sS)tT/uU?vV=wW+xX;yY:zZ'
+BASELEN=len(ALPHABET)
+
+# Pre-calculate for speed (O(1) lookups)
+ENCODE_TABLE=[ALPHABET[b//BASELEN]+ALPHABET[b%BASELEN] for b in range(256)]
+DECODE_TABLE={ALPHABET[b//BASELEN]+ALPHABET[b%BASELEN]: b for b in range(256)}
+
+# Decode the input.  Just break the response if its bad data...
+
+def dlmEncode(data_bytes):
+    try:
+        if isinstance(data_bytes, dict):
+            data_bytes = json.dumps(data_bytes)
+        if isinstance(data_bytes, str):
+            data_bytes = data_bytes.encode('utf-8')
+        return "".join(ENCODE_TABLE[b] for b in data_bytes)
+    except:
+        return b""
+
+# Decode the input.  Just break the response if its bad data...
+
+def dlmDecode(encoded_str):
+    try:
+        if not encoded_str:
+            return b""
+        return bytes(DECODE_TABLE[encoded_str[i:i+2]] for i in range(0, len(encoded_str), 2))
+    except:
+        return b""
+
 # Read authentication file from disk
 
 def ReadIdentity(fn):
@@ -87,9 +121,9 @@ def ReadIdentity(fn):
             buffer=None
     else:
         buffer=None
-    if buffer and 'MaxSize' not in buffer:
+    if isinstance(buffer,dict) and 'MaxSize' not in buffer:
         buffer['MaxSize']=MaxDataStoreSize
-    if buffer and not NumberOnly(buffer['MaxSize']):
+    if isinstance(buffer,dict) and not NumberOnly(buffer['MaxSize']):
         buffer['MaxSize']=MaxDataStoreSize
     return buffer
 
@@ -124,7 +158,8 @@ def jsonStatus(str,id=None,Tag=None,Data=None):
     if Tag!=None and Data!=None:
         res[Tag]=Data
 
-    return json.dumps(res)+'\n'
+    out=dlmEncode(json.dumps(res))
+    return out+'\n'
 
 # Is it a number?
 
@@ -165,6 +200,9 @@ def ProcessPayload(data):
     global Statistics
     global Locker
     global MaxDataHoldSize
+
+    # Decode the payload
+    data=dlmDecode(data.strip())
 
     try:
         dataDB=json.loads(data)
@@ -627,3 +665,7 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+###
+### End program
+###
