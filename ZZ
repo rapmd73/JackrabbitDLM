@@ -1,0 +1,13 @@
+def ReadFile(fn,binary=False):
+    if os.path.exists(fn):
+        if binary:
+            cf=open(fn,'rb')
+            buffer=cf.read()
+            cf.close()
+        else:
+            cf=open(fn,'r')
+            buffer=cf.read().strip()
+            cf.close()
+    else:
+        buffer=None
+    return buffer

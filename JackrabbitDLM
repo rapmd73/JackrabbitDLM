@@ -40,9 +40,10 @@ import socket
 import select
 import json
 
-Version="0.0.0.2.120"
+Version="0.0.0.2.300"
 BaseDirectory="/home/JackrabbitDLM"
 ConfigDirectory=f"{BaseDirectory}/Config"
+DiskDirectory=f"{BaseDirectory}/Disk"
 LogDirectory=f"{BaseDirectory}/Logs"
 
 # Statistics
@@ -105,6 +106,12 @@ def dlmDecode(encoded_str):
     except:
         return b""
 
+# Sanitize file path for disk reading/writing
+
+def Sanitize(FileName):
+    fname=dlmEncode(FileName)+'.db'
+    return fname
+
 # Read authentication file from disk
 
 def ReadIdentity(fn):
@@ -145,6 +152,25 @@ def WriteLog(msg):
     fh=open(LogDirectory+'/JackrabbitDLM.log','a')
     fh.write(s)
     fh.close()
+
+# Write a file to disk
+
+def WriteFile(fn,data):
+    print(len(data,fn))
+    cf=open(fn,'w')
+    cf.write(data)
+    cf.close()
+
+# Read a file from disk
+
+def ReadFile(fn):
+    if os.path.exists(fn):
+        cf=open(fn,'r')
+        buffer=cf.read().strip()
+        cf.close()
+    else:
+        buffer=None
+    return buffer
 
 # Convience to build the status and a json payload
 
@@ -351,6 +377,13 @@ def ProcessPayload(data):
             if 'DataStore' in Locker[FileName]:
                 Statistics['Get']=Statistics.get('Get',0)+1
                 Statistics['DataOut']=Statistics.get('DataOut',0)+len(Locker[FileName]['DataStore'])
+                if 'Disk' in Locker[FileName]:
+                    try:
+                        data=json.loads(ReadFile(Sanitize(FileName)))
+                        return jsonStatus("Done",Locker[FileName]['ID'],Tag="DataStore",Data=data['DataStore'])
+                    except:
+                        Statistics['Corruption']=Statistics.get('Corruption',0)+1
+                        return jsonStatus("Corruption")
                 return jsonStatus("Done",Locker[FileName]['ID'],Tag="DataStore",Data=Locker[FileName]['DataStore'])
 
             Statistics['GetNF']=Statistics.get('GetNF',0)+1
@@ -377,10 +410,15 @@ def ProcessPayload(data):
             dStore['ID']=dataDB['ID']
             dStore['Expire']=time.time()+float(dataDB['Expire'])
             dStore['DataStore']=dataDB['DataStore']
+            if len(dataDB['DataStore'])>MaxDataStoreSize:
+                dStore['Disk']=True     # only pressence matters in Get()
             Locker[FileName]=dStore
             if 'Name' in dataDB:    # Add the authentication
                 Locker[FileName]['Name']=dataDB['Name']
                 Locker[FileName]['Identity']=dataDB['Identity']
+            if 'Disk' in dStore:
+                WriteFile(Sanitize(FileName),json.dumps(Locker[FileName]))
+                Locker[FileName]['DataStore']="OD"
             Statistics['PutNew']=Statistics.get('PutNew',0)+1
             Statistics['DataIn']=Statistics.get('DataIn',0)+len(dataDB['DataStore'])
             return jsonStatus("Done",Locker[FileName]['ID'])
@@ -398,8 +436,17 @@ def ProcessPayload(data):
                 Statistics['BadPayload']=Statistics.get('BadPayload',0)+1
                 return jsonStatus("BadPayload")
 
+            Locker[FileName]['DataStore']=dataDB['DataStore']
+            print(len(dataDB['DataStore']))
+            if len(dataDB['DataStore'])>MaxDataStoreSize:
+                Locker[FileName]['Disk']=True     # only pressence matters in Get()
+            else:
+                Locker[FileName].pop('Disk',None)
             Locker[FileName]['Expire']=time.time()+float(dataDB['Expire'])
             Locker[FileName]['DataStore']=dataDB['DataStore']
+            if 'Disk' in Locker[FileName]:
+                WriteFile(Sanitize(FileName),json.dumps(Locker[FileName]))
+                Locker[FileName]['DataStore']="OD"
             Statistics['DataIn']=Statistics.get('DataIn',0)+len(dataDB['DataStore'])
             Statistics['PutUpdate']=Statistics.get('PutUpdate',0)+1
             return jsonStatus("Done",Locker[FileName]['ID'])
@@ -454,6 +501,9 @@ def main():
     global Statistics
     global Locker
     global MaxDataHoldSize
+
+    os.makedirs(DiskDirectory,exist_ok=True)
+    os.makedirs(LogDirectory,exist_ok=True)
 
     OldHour=-1
 
