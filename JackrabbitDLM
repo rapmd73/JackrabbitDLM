@@ -30,6 +30,10 @@
 # { "ID":"DEADBWEEF", "FileName":"testData", "Action":"Put", "Expire":"300","DataStore":"Blah" }
 # { "ID":"DEADBWEEF", "FileName":"testData", "Action":"Erase" }
 
+# NOTES:
+
+#   At some point, i need to figure out memory and disk space consumption and limits
+
 import sys
 sys.path.append('/home/JackrabbitDLM')
 import os
@@ -40,7 +44,7 @@ import socket
 import select
 import json
 
-Version="0.0.0.2.300"
+Version="0.0.0.2.400"
 BaseDirectory="/home/JackrabbitDLM"
 ConfigDirectory=f"{BaseDirectory}/Config"
 DiskDirectory=f"{BaseDirectory}/Disk"
@@ -109,7 +113,7 @@ def dlmDecode(encoded_str):
 # Sanitize file path for disk reading/writing
 
 def Sanitize(FileName):
-    fname=dlmEncode(FileName)+'.db'
+    fname=f"{DiskDirectory}/{dlmEncode(FileName)}.db"
     return fname
 
 # Read authentication file from disk
@@ -122,7 +126,7 @@ def ReadIdentity(fn):
         cf.close()
         try:
             buffer=json.loads(buffer)
-        except:
+        except Exception as err:
             buffer=None
         if buffer and 'Identity' in buffer and len(buffer['Identity'])<1023:
             buffer=None
@@ -156,7 +160,6 @@ def WriteLog(msg):
 # Write a file to disk
 
 def WriteFile(fn,data):
-    print(len(data,fn))
     cf=open(fn,'w')
     cf.write(data)
     cf.close()
@@ -196,6 +199,48 @@ def NumberOnly(s):
     except:
         return False
     return False
+
+# At startup, reload the disk files
+
+def ReloadDiskMemory():
+    global Locker
+    global Statistics
+
+    if not os.path.isdir(DiskDirectory):
+        return
+
+    # Loop through all files in the folder
+    for FileName in os.listdir(DiskDirectory):
+        fname=f"{DiskDirectory}/{FileName}"
+
+        # Make sure is a file
+        if not os.path.isfile(fname):
+            continue
+
+        # Ignore DOT files
+        if FileName.startswith('.'):
+            continue
+
+        # Read the file on disk
+        try:
+            dataDB=json.loads(ReadFile(fname))
+        except:
+            Statistics['Corruption']=Statistics.get('Corruption',0)+1
+            os.remove(fname)
+            continue
+
+        # If data is expired, do NOT reload it.
+
+        if time.time()>dataDB['Expire']:
+            Statistics['ExpiredData']=Statistics.get('ExpiredData', 0)+1
+            os.remove(fname)
+            continue
+
+        # Set the Locker entry
+        Locker[FileName]=dataDB
+        Statistics['PutNew']=Statistics.get('PutNew',0)+1
+        Statistics['DataIn']=Statistics.get('DataIn',0)+len(dataDB['DataStore'])
+    return
 
 # Check the authentication
 
@@ -278,6 +323,7 @@ def ProcessPayload(data):
         Statistics['AuthFailed']=Statistics.get('AuthFailed',0)+1
         return jsonStatus("BadPayload")
 
+    auth=None
     MaxSize=MaxDataStoreSize
     if 'Name' in dataDB:
         auth=ReadIdentity(dataDB['Name'])
@@ -408,6 +454,7 @@ def ProcessPayload(data):
 
             dStore={}
             dStore['ID']=dataDB['ID']
+            dStore['FileName']=FileName
             dStore['Expire']=time.time()+float(dataDB['Expire'])
             dStore['DataStore']=dataDB['DataStore']
             if len(dataDB['DataStore'])>MaxDataStoreSize:
@@ -417,8 +464,13 @@ def ProcessPayload(data):
                 Locker[FileName]['Name']=dataDB['Name']
                 Locker[FileName]['Identity']=dataDB['Identity']
             if 'Disk' in dStore:
+                # Push to diskand shink memoet footprint. DataStore can NOT be removed
+                # becaue of integrity testing.
                 WriteFile(Sanitize(FileName),json.dumps(Locker[FileName]))
                 Locker[FileName]['DataStore']="OD"
+                Statistics['PutDisk']=Statistics.get('PutDisk',0)+1
+            else:
+                Statistics['PutMemory']=Statistics.get('PutMemory',0)+1
             Statistics['PutNew']=Statistics.get('PutNew',0)+1
             Statistics['DataIn']=Statistics.get('DataIn',0)+len(dataDB['DataStore'])
             return jsonStatus("Done",Locker[FileName]['ID'])
@@ -437,16 +489,25 @@ def ProcessPayload(data):
                 return jsonStatus("BadPayload")
 
             Locker[FileName]['DataStore']=dataDB['DataStore']
-            print(len(dataDB['DataStore']))
+            # The DataStore can move back and forth from disk to memory.
             if len(dataDB['DataStore'])>MaxDataStoreSize:
                 Locker[FileName]['Disk']=True     # only pressence matters in Get()
             else:
+                # Size under required limit, delete disk file.
                 Locker[FileName].pop('Disk',None)
+                if os.path.exists(Sanitize(FileName)):
+                    os.remove(Sanitize(FileName))
             Locker[FileName]['Expire']=time.time()+float(dataDB['Expire'])
             Locker[FileName]['DataStore']=dataDB['DataStore']
             if 'Disk' in Locker[FileName]:
+                # Add the memory to the holding counter.
+                MaxDataHoldSize+=len(Locker[FileName]['DataStore'])
                 WriteFile(Sanitize(FileName),json.dumps(Locker[FileName]))
                 Locker[FileName]['DataStore']="OD"
+                Statistics['PutDisk']=Statistics.get('PutDisk',0)+1
+            else:
+                Statistics['PutMemory']=Statistics.get('PutMemory',0)+1
+
             Statistics['DataIn']=Statistics.get('DataIn',0)+len(dataDB['DataStore'])
             Statistics['PutUpdate']=Statistics.get('PutUpdate',0)+1
             return jsonStatus("Done",Locker[FileName]['ID'])
@@ -478,6 +539,14 @@ def ProcessPayload(data):
             Locker[FileName]['Expire']=0
             MaxDataHoldSize+=len(Locker[FileName]['DataStore'])
             Locker[FileName]['DataStore']=None
+            Locker[FileName].pop('Disk',None)
+
+            # I could test for 'Disk', but a DataStore can move back and forth from
+            # disk to ram. The cost in minimal just to check the disk
+            # (security/leakage).
+
+            if os.path.exists(Sanitize(FileName)):
+                os.remove(Sanitize(FileName))
             Statistics['Erased']=Statistics.get('Erased',0)+1
             return jsonStatus("Done",Locker[FileName]['ID'])
 
@@ -507,8 +576,6 @@ def main():
 
     OldHour=-1
 
-    WriteLog(f"Jackrabbit DLM {Version}")
-
     host=''
     port=37373
 
@@ -516,6 +583,10 @@ def main():
         host=sys.argv[1]
     if len(sys.argv) > 2:
         port=int(sys.argv[2])
+
+    WriteLog(f"Jackrabbit DLM {Version}")
+
+    ReloadDiskMemory()
 
     dataStore={}
     sendBuffer={}
@@ -680,11 +751,14 @@ def main():
             if now > Locker[k]['Expire']:
                 if 'DataStore' in Locker[k]:
                     if Locker[k]['DataStore'] is not None:
-                        MaxDataHoldSize += len(Locker[k]['DataStore'])
+                        if 'Disk' in Locker[k]:
+                            if os.path.exists(Sanitize(k)):
+                                os.remove(Sanitize(k))
+                        MaxDataHoldSize+=len(Locker[k]['DataStore'])
                         Locker[k]['DataStore']=None
-                    Statistics['ExpiredData']=Statistics.get('ExpiredData', 0)+1
+                    Statistics['ExpiredData']=Statistics.get('ExpiredData',0)+1
                 else:
-                    Statistics['ExpiredLock']=Statistics.get('ExpiredLock', 0)+1
+                    Statistics['ExpiredLock']=Statistics.get('ExpiredLock',0)+1
                 Locker.pop(k, None)
 
             # Count the active enty only
