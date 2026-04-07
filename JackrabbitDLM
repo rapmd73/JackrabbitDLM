@@ -45,7 +45,7 @@ import socket
 import select
 import json
 
-Version="0.0.0.2.450"
+Version="0.0.0.2.470"
 BaseDirectory="/home/JackrabbitDLM"
 ConfigDirectory=f"{BaseDirectory}/Config"
 DiskDirectory=f"{BaseDirectory}/Disk"
@@ -142,8 +142,8 @@ def MemoryOverloadCheck(threshold_percent=MemoryThreshold):
     Statistics['MemoryUsage']=usage_percent
 
     if usage_percent>threshold_percent:
-        return True
-    return False
+        return True,usage_percent
+    return False,usage_percent
 
 # Sanitize file path for disk reading/writing
 
@@ -328,6 +328,8 @@ def ProcessPayload(data):
         Statistics['BadPayload']=Statistics.get('BadPayload',0)+1
         return jsonStatus("BadPayload")
 
+    dataDB['Expire']=float(dataDB['Expire'])
+
     # Verify any additional security layers. Identity is OPTIONAL, with the
     # following exceptions:
     #   1. Expiration > specified limit
@@ -354,7 +356,7 @@ def ProcessPayload(data):
             return jsonStatus("BadPayload")
 
     # Force check expire
-    if float(dataDB['Expire'])>MaxTTL and 'Name' not in dataDB:
+    if dataDB['Expire']>MaxTTL and 'Name' not in dataDB:
         Statistics['AuthFailed']=Statistics.get('AuthFailed',0)+1
         return jsonStatus("BadPayload")
 
@@ -392,7 +394,8 @@ def ProcessPayload(data):
 
     if action=='lock':
         # Check memory, if overloaded, nothing to that consumes more memory
-        if MemoryOverloadCheck():
+        overload,pct=MemoryOverloadCheck()
+        if overload:
             Statistics['MemoryOverloadCheck']=Statistics.get('MemoryOverloadCheck',0)+1
             return jsonStatus("NO")
 
@@ -401,7 +404,7 @@ def ProcessPayload(data):
         or time.time()>Locker[FileName]['Expire']:
             dataLock={}
             dataLock['ID']=dataDB['ID']
-            dataLock['Expire']=time.time()+float(dataDB['Expire'])
+            dataLock['Expire']=time.time()+dataDB['Expire']
             Locker[FileName]=dataLock
             if 'Name' in dataDB:    # Add the authentication
                 Locker[FileName]['Name']=dataDB['Name']
@@ -416,7 +419,7 @@ def ProcessPayload(data):
                 Statistics['NotOwner']=Statistics.get('NotOwner',0)+1
                 return jsonStatus("NotOwner")
 
-            Locker[FileName]['Expire']=time.time()+float(dataDB['Expire'])
+            Locker[FileName]['Expire']=time.time()+dataDB['Expire']
             Statistics['Relock']=Statistics.get('Relock',0)+1
             return jsonStatus("Locked",Locker[FileName]['ID'])
 
@@ -480,7 +483,8 @@ def ProcessPayload(data):
         return jsonStatus("NotOwner")
     elif action=='put':
         # Check memory, if overloaded, nothing to that consumes more memory
-        if MemoryOverloadCheck():
+        overload,pct=MemoryOverloadCheck()
+        if overload:
             Statistics['MemoryOverloadCheck']=Statistics.get('MemoryOverloadCheck',0)+1
             return jsonStatus("NO")
 
@@ -488,6 +492,12 @@ def ProcessPayload(data):
         if 'DataStore' not in dataDB:
             Statistics['BadPayload']=Statistics.get('BadPayload',0)+1
             return jsonStatus("BadPayload")
+
+        # Optimize when to send to disk,
+
+        ForceDisk=(len(dataDB['DataStore'])>MaxDataStoreSize and dataDB['Expire']>10) \
+               or (len(dataDB['DataStore'])>MaxDataStoreSize and pct>(MemoryThreshold/2)) \
+               or (len(dataDB['DataStore'])>MaxDataStoreSize/2 and pct>(MemoryThreshold*0.75))
 
         # New memory object
         if FileName not in Locker \
@@ -500,9 +510,9 @@ def ProcessPayload(data):
             dStore={}
             dStore['ID']=dataDB['ID']
             dStore['FileName']=FileName
-            dStore['Expire']=time.time()+float(dataDB['Expire'])
+            dStore['Expire']=time.time()+dataDB['Expire']
             dStore['DataStore']=dataDB['DataStore']
-            if len(dataDB['DataStore'])>MaxDataStoreSize:
+            if ForceDisk:
                 dStore['Disk']=True     # only pressence matters in Get()
             Locker[FileName]=dStore
             if 'Name' in dataDB:    # Add the authentication
@@ -535,14 +545,14 @@ def ProcessPayload(data):
 
             Locker[FileName]['DataStore']=dataDB['DataStore']
             # The DataStore can move back and forth from disk to memory.
-            if len(dataDB['DataStore'])>MaxDataStoreSize:
+            if ForceDisk:
                 Locker[FileName]['Disk']=True     # only pressence matters in Get()
             else:
                 # Size under required limit, delete disk file.
                 Locker[FileName].pop('Disk',None)
                 if os.path.exists(Sanitize(FileName)):
                     os.remove(Sanitize(FileName))
-            Locker[FileName]['Expire']=time.time()+float(dataDB['Expire'])
+            Locker[FileName]['Expire']=time.time()+dataDB['Expire']
             Locker[FileName]['DataStore']=dataDB['DataStore']
             if 'Disk' in Locker[FileName]:
                 # Add the memory to the holding counter.

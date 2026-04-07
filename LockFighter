@@ -103,6 +103,7 @@ while c<m:
                         TestMemory=True
                     else:
                         TestMemory=False
+
                 if TestMemory:
                     rn=random.random()
                     if rn>.5:
