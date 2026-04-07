@@ -1,36 +1,79 @@
-## Section - Non‑Technical Description
+## Section 1 - Non-Technical Description  
+The program repeatedly tries to grab a lock from a service called Jackrabbit DLM, reads a stored number when it succeeds, sometimes updates that number with a new value, and occasionally creates large random chunks of data to see how the service behaves under heavy load. It runs for a user‑specified number of attempts (or until an internal counter reaches that limit), records how many attempts succeed or fail, measures how often it reads or writes data tracks any errors that occur when storing big payloads, and finally prints a summary line showing the process ID how long the run took and various statistics about successes failures reads writes contention and leftover counter value.
 
-The program repeatedly tries to gain exclusive access to a shared storage area so it can read a number kept there, possibly increase that number by one every few attempts based on chance, and records how often it succeeds or fails in obtaining that access.
+## Section 2 - Technical Analysis  
 
+The script begins by adding a custom directory to the Python module search path so it can import a local module named `DLMLocker`, which it aliases as `DLM`. It sets a default TCP port (`37373`) for communicating with the Jackrabbit DLM service.  
 
+Command‑line arguments control several Boolean flags:  
+- If the argument `chaos` appears among `sys.argv`, `Chaos` becomes `True`.  
+- If `aggressive` appears, `RetryLocker` is set to `False` (otherwise it stays `True`).  
+- If `locks` appears, `TestMemory` is set to `False` (otherwise it stays `True`).  
 
-## Section - Technical Analysis
+A positional numeric argument (if provided) is converted to an integer and stored in variable `m`, which determines how many successful iterations the main loop should aim for before exiting. The width (`ws`) used later for pretty‑printing numbers is derived from the length of the string representation of `m`. Several counters are initialized to zero: memory consumption (`c`), failed lock attempts (`f`), successful lock acquisitions (`s`), read operations (`r`), write operations (`w`), and killed connections due to oversized payloads (`k`).  
 
-The script begins by importing several standard library modules (`sys`, `os`, `time`, `json`, `random`) and appending `/home/GitHub/JackrabbitDLM` to the module search path so that the custom module `DLMLocker` can be imported under the alias **DLM**. Two command‑line arguments influence its behavior: an optional integer supplied as the first positional argument sets the target iteration count **m** (default = *​​​​​​​​​​​​* * * * * * * * *), while presence of the strings *aggressive* and *locks* toggles Boolean flags **RetryLocker** (‑False when *aggressive* appears) and **TestMemory** (‑False when *locks* appears).
+Two locker objects are instantiated using the imported DLM class:  
+- A "framework" locker named `'LockerTest'` bound to port 37373 with a ten‑second timeout and zero internal retries (`fw1`).  
+- A "memory" locker named `'LockFighter'` with an explicit ID string also bound to port 37373 (`Memory`).  
 
-Three integer counters are initialized (**c**, **f**, **s**, **r**, **w**) representing respectively an internal value tracker for memory operations,
-failed lock acquisitions,
-successful lock acquisitions,
-read operations,
-and write operations.
-A floating‑point value **wv** drawn uniformly from [0 - ] determines later write probability thresholds.
-Two locker objects are created via calls into **DLMLocker**:
-- **fw₁** (`DLM.Locker('LockerTest', Timeout=..., Retry=`...)) represents "the framework" used for acquiring locks;
-- **Memory** (`DLM.Locker('LockFighter', ID='LockFighterMemory')`) represents "the data store" where key‑value pairs are persisted.
-Immediately afterwards an authentication check (`fw₁.IsDLM()`) verifies that an underlying service named JackrabbitDLM is reachable; otherwise an error message prints and execution terminates with exit status ¹⁰¹⁰¹⁰¹⁰¹⁰¹⁰¹⁰¹⁰¹⁰¹²³³³³³³³³³³³³***???***.
+Immediately after creation the script checks whether the framework locker reports that Jackrabbit DLM is actually running via its `.IsDLM()` method; if not it prints an error message and exits with status code 1.  
 
-Inside each iteration of while-loop conditioned on (**c < m**), one of two possible locking strategies selects based on flag state (**RetryLocker**). When true (**RetryLocker**), method call (**fw₁.Lock(expire=`...**) obtains an exclusive lease employing internal retry logic;
-when false (**RetryLocker**), method call (**fw₁.IsLocked(expire=`...**) simply tests whether another process currently holds such lease without attempting retries.
-If returned string equals `'locked'` indicating successful acquisition,
-control enters protected section guarded by generic exception handling.
-Within this section,
-a read operation retrieves current payload via (**Memory.Get()**) incrementing read counter (**r**). If payload contains key `'DataStore'` its value parsed into integer overwrites local variable (**c**). Otherwise payload considered absent - implying initial state - local variable remains unchanged.
-Subsequently independent uniform draw decides whether current iteration performs write operation according threshold derived earlier from stored float value rounded two decimal places plus condition ensuring target limit not yet exceeded;
-on success local counter increments before persisting updated numeric string back into store through call (**Memory.Put(data=str(c), expire=`...**) raising write counter (**w**). In case payload lacked `'DataStore'` key unconditional write occurs similarly increasing both local counter & writer count irrespective threshold test regardless outcome above scenario leading always incrementation & persistence attempt whenever entry missing initially present nonexistent entry case leads immediate creation attempt regardless probability check due absence guard clause earlier branch ensures writing occurs anyway once found missing entry detection triggers unconditional insertion path separate conditional branch preceding probability test ensures writes happen only when entry existed already present thus distinguishing between creation vs update pathways though both result identical effect storing incremented numeric representation back into store updating writer metric accordingly .
-Regardless outcome above branch executes optional junk generation sub‑routine contingent upon flag TestMemory being true;
-here another uniform draw determines whether auxiliary locker object instantiated either bearing name suffix colon appended framework identifier plus supplied constant strings N/I representing attacker role versus benign role respectively ; further nested draws decide whether large random byte blob generated via os·urandom sized between ninety-six kilobytes multiplied factor ten twenty-four up five hundred twelve kilobytes inserted temporarily into auxiliary locker's storage expiring ten seconds later ; subsequent independent draw decides whether auxiliary locker's contents erased immediately thereafter cleaning up garbage produced during this inner sub‑routine .
-Regardless success failure within protected section successful path increments success counter (*s*) whereas any raised exception caught increments failure counter (*f*) prints traceback optionally pauses tenth second when retry enabled before proceeding onward ;
-after exiting protected region irrespective outcome unlocking call executed releasing held lease allowing other contenders opportunity acquire same resource next cycle .
-When acquisition attempt fails i.e returned string differs `'locked'` failure counter increments similarly optional tenth second pause applied contingent upon retry enabled flag .
+A long constant string assigned to variable `I` represents an identity blob used later when creating special "junk" lockers. Variable `N` holds the simple name `'LockFighter'`. A floating‑point value `wv` is drawn from a uniform distribution `[0.,1.)` once before entering the main loop - this value influences how often writes are performed later on.
 
-Loop repeats until locally tracked value reaches preset limit m at which point elapsed wall clock time captured , contention ratio calculated proportion failures divided total attempts multiplied hundred rounded two decimal places , final line printed comprising : first character textual representation boolean flag indicating retry mode enabled/disabled , process identifier obtained via os·getpid , elapsed duration formatted eight digits precision decimal point , followed sequentially integers counts failures successes reads writes contention ratio percentage final internal numeric value reached upon termination .
+The core processing consists of a while‑loop that continues until counter `c` reaches the target value `m`. Inside each iteration:
+
+1. **Chaos handling** - When `Chaos=True`, another random float decides whether retry logic will be enabled for this iteration (`RetryLocker=True`) or disabled (`RetryLocker=False`). When chaos mode is off this step is skipped.
+2 **Lock acquisition** - Depending on current state of retry logic:
+    - If retry logic is enabled (`RetryLocker=True`) call `.Lock(expire=10)` on framework locker.
+    - Otherwise call `.IsLocked(expire=10)` which attempts an immediate check without internal retries.
+    The result is stored in variable rl.
+3 **Successful lock path** - If rl equals exactly `'locked'`:
+    - Attempt `.Get()` on memory locker → assign returned JSON text variable sData.
+      Increment read counter r.
+    - Parse sData as JSON implicitly via membership test:
+        *If key `'DataStore'` exists*, convert its value into integer → update counter c.
+        *Otherwise* leave c unchanged at its current numeric value.
+    - Generate another uniform random float:
+        *If* current c still less than target m **and** this float exceeds rounded(wv) → treat as write case:
+            Increment c by one,
+            Call `.Put(data=str(c), expire=10)` on memory,
+            Increment write counter w.
+        *Else* skip writing but still may have updated memory earlier via Get/Set flow.
+    - **Chaos junk block** - When chaos mode active:
+        *Toggle* TestMemory flag based on another uniform draw (> .5 → True else False).
+        *If* TestMemory currently True:
+            Create second locker object called Junker either:
+                - With explicit name built from framework's own ID plus suffix `:Junker:` plus N plus identity I (**when** another uniform draw > .5),
+                - Or without identity suffix (**when** ≤ .5).
+            Generate yet another uniform draw;
+                If > .25 allocate byte string sized randomly between 8 KiB-768 KiB multiplied by 1024 using os.random,
+                Attempt `.Put(data=<that>, expire=random seconds between 3-300)`;
+                    Record any error reported by Junker.Error into killed‑connection counter k.
+            Finally perform one more uniform draw;
+                If > .75 call `.Erase()` on Junker regardless of previous outcome.
+      Regardless of chaos handling after possible junk work increment success counter s by one .
+4 **Failed / exceptional paths**:
+    - Any exception raised inside try block increments failure counter f;
+      When retry logic was enabled pause briefly via time.sleep(0·¹) before continuing outer loop body .
+    - When rl was anything other than locked treat as immediate failure → same actions as above (increment f optional short sleep).
+5 After processing either success or failure branch there remains an unconditional pause when retry logic remains enabled : time.sleep(·¹).
+
+When loop terminates because c ≥ m elapsed wall clock time captured via start/end timestamps taken around whole operation .
+
+Post‑loop calculations:
+- Contention rate cr computed only when total failures > 0 : round((f/(s+f))*·¹⁰⁰ ,·²); otherwise remains zero .
+- Single character flag lft chosen : 'C' when chaos mode active else first character textual representation of boolean RetryLocker ('T' for True 'F' for False).
+
+Finally script prints one formatted line containing :
+literal flag lft,
+process id right aligned width eight,
+elapsed seconds with eight decimal places,
+failure count padded width ws,
+success count padded width ws,
+read count padded width ws,
+write count padded width ws,
+contention rate shown always two decimal places ,
+killed connection count padded width ws ,
+final numeric value of memory store variable c .
+
+No further actions performed after printing ; program ends naturally returning exit code zero unless earlier error caused sys.exit(·¹).

@@ -38,17 +38,30 @@ import sys
 sys.path.append('/home/JackrabbitDLM')
 import os
 import gc
+import psutil
 import time
 from datetime import datetime
 import socket
 import select
 import json
 
-Version="0.0.0.2.400"
+Version="0.0.0.2.450"
 BaseDirectory="/home/JackrabbitDLM"
 ConfigDirectory=f"{BaseDirectory}/Config"
 DiskDirectory=f"{BaseDirectory}/Disk"
 LogDirectory=f"{BaseDirectory}/Logs"
+
+# Most expensive part of the code, excluding disk operations. Making this global has
+# doubled throughput. These two items are brutal in context of processing throughput.
+# This is a reasonable trade-off for system stability.
+
+Process=psutil.Process(os.getpid())
+# Total system RAM
+TotalRAM=psutil.virtual_memory().total
+
+# Memory threshold to rejecting new data stores, percentage
+
+MemoryThreshold=33
 
 # Statistics
 
@@ -109,6 +122,28 @@ def dlmDecode(encoded_str):
         return bytes(DECODE_TABLE[encoded_str[i:i+2]] for i in range(0, len(encoded_str), 2))
     except:
         return b""
+
+# Check memory usage, return true is above threshold. This is expensive. The DLM
+# literally has 3x the throughput WITHOUT this function.
+
+def MemoryOverloadCheck(threshold_percent=MemoryThreshold):
+    global Statistics
+    global Process
+
+    # Current process RAM usage
+    process_ram=Process.memory_info().rss  # Resident Set Size in bytes
+
+    # Percentage of total RAM used by this program
+    usage_percent=(process_ram/TotalRAM)*100
+
+    # Save the percentage statistics
+    if usage_percent>Statistics.get('MemoryMax',0):
+        Statistics['MemoryMax']=usage_percent
+    Statistics['MemoryUsage']=usage_percent
+
+    if usage_percent>threshold_percent:
+        return True
+    return False
 
 # Sanitize file path for disk reading/writing
 
@@ -356,6 +391,11 @@ def ProcessPayload(data):
     # used as a rate limiter as well.
 
     if action=='lock':
+        # Check memory, if overloaded, nothing to that consumes more memory
+        if MemoryOverloadCheck():
+            Statistics['MemoryOverloadCheck']=Statistics.get('MemoryOverloadCheck',0)+1
+            return jsonStatus("NO")
+
         # New lock request
         if FileName not in Locker \
         or time.time()>Locker[FileName]['Expire']:
@@ -439,6 +479,11 @@ def ProcessPayload(data):
         Statistics['NotOwner']=Statistics.get('NotOwner',0)+1
         return jsonStatus("NotOwner")
     elif action=='put':
+        # Check memory, if overloaded, nothing to that consumes more memory
+        if MemoryOverloadCheck():
+            Statistics['MemoryOverloadCheck']=Statistics.get('MemoryOverloadCheck',0)+1
+            return jsonStatus("NO")
+
         # If there is no DataStore, its broke.
         if 'DataStore' not in dataDB:
             Statistics['BadPayload']=Statistics.get('BadPayload',0)+1
@@ -772,6 +817,7 @@ def main():
         ct=datetime.now()
         if ct.hour != OldHour and len(Statistics)>0:
             OldHour=ct.hour
+            MemoryOverloadCheck()
             s=', '.join(f"{k}: {v}" for k,v in sorted(Statistics.items()) if v>0)
             WriteLog(s)
             Statistics={}

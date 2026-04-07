@@ -28,7 +28,7 @@ class Locker:
     # Initialize the file name
     def __init__(self, filename, Retry=7, RetrySleep=1, Timeout=300, ID=None, Host='', Port=37373, Encoder=None, Decoder=None, name=None, identity=None):
         self.VERSION="0.0.0.1.530"
-        self.ulResp=['badpayload','locked','unlocked','notowner','notfound','version']
+        self.ulResp=['badpayload','locked','unlocked','notowner','notfound','version','no']
 
         # Encoding String
         self.ALPHABET='1aA2bB3cC4dD5eE6fF7gG8hH9iI0jJ!kK@lL#mM$nN%oO^pP&qQ*rR(sS)tT/uU?vV=wW+xX;yY:zZ'

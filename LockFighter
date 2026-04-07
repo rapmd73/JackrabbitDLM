@@ -97,6 +97,12 @@ while c<m:
                     w+=1
 
                 # Random Junk
+                if Chaos:
+                    rn=random.random()
+                    if rn>.5:
+                        TestMemory=True
+                    else:
+                        TestMemory=False
                 if TestMemory:
                     rn=random.random()
                     if rn>.5:
@@ -110,8 +116,8 @@ while c<m:
                     if rn>0.25:
                         # The block should test Jackrabbit DLM's ability to
                         # require block size identty.
-                        data=str(os.urandom(random.randint(8,512)*1024))
-                        res=Junker.Put(data=data,expire=10)
+                        data=str(os.urandom(random.randint(8,768)*1024))
+                        res=Junker.Put(data=data,expire=random.randint(3,300))
                         if Junker.Error:
                             k+=1
                     rn=random.random()
@@ -145,4 +151,8 @@ etime=time.time()
 cr=0
 if f>0:
     cr=round((f/(s+f))*100,2)
-print(f"{str(RetryLocker)[0]} {os.getpid():8} {etime-stime:.8f} {f:{ws}} {s:{ws}} {r:{ws}} {w:{ws}} {cr:.2f} {k:{ws}} {c}")
+if Chaos:
+    lft='C'
+else:
+    lft=str(RetryLocker)[0]
+print(f"{lft} {os.getpid():8} {etime-stime:.8f} {f:{ws}} {s:{ws}} {r:{ws}} {w:{ws}} {cr:.2f} {k:{ws}} {c}")

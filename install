@@ -15,6 +15,8 @@ fi
 BaseDir="/home/JackrabbitDLM"
 
 cd /home/GitHub/JackrabbitDLM
+python3 -m pip install --upgrade pip
+$pip3 install -U -r requirements.txt
 
 mkdir -p $BaseDir > /dev/null 2>&1
 mkdir -p $BaseDir/Logs > /dev/null 2>&1
