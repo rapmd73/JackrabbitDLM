@@ -41,6 +41,7 @@ Dates={}
 for line in lines:
     if 'Jackrabbit DLM' in line \
     or 'Another program is using this port' in line \
+    or 'DLMerror' in line \
     or 'Errno' in line \
     or 'Error' in line:
         continue
