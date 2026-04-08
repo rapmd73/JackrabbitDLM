@@ -45,7 +45,7 @@ import socket
 import select
 import json
 
-Version="0.0.0.2.500"
+Version="0.0.0.2.570"
 BaseDirectory="/home/JackrabbitDLM"
 ConfigDirectory=f"{BaseDirectory}/Config"
 DiskDirectory=f"{BaseDirectory}/Disk"
@@ -518,10 +518,10 @@ def ProcessPayload(addr,data):
 
             dStore={}
             dStore['ID']=dataDB['ID']
-            dStore['FileName']=FileName
             dStore['Expire']=time.time()+dataDB['Expire']
             dStore['DataStore']=dataDB['DataStore']
             if ForceDisk:
+                dStore['FileName']=FileName
                 dStore['Disk']=True     # only pressence matters in Get()
             Locker[FileName]=dStore
             if 'Name' in dataDB:    # Add the authentication
@@ -555,6 +555,7 @@ def ProcessPayload(addr,data):
             Locker[FileName]['DataStore']=dataDB['DataStore']
             # The DataStore can move back and forth from disk to memory.
             if ForceDisk:
+                Locker[FileName]['FileName']=FileName
                 Locker[FileName]['Disk']=True     # only pressence matters in Get()
             else:
                 # Size under required limit, delete disk file.
@@ -650,9 +651,20 @@ def main():
 
     WriteLog(f"Jackrabbit DLM {Version}")
 
+    # Reload disk DataStores, if they are not expired.
+
     ReloadDiskMemory()
 
+    # The length is a convience to keep the optimizations as high as possible.  Its
+    # a slight of hand optimation from "+=" string concatination vs .append()/.join()
+    # list operations. Difference is 9 seconds ("+=") compared to 0.06 seconds for
+    # .append().join() for a 100 MB payload.
+
     dataStore={}
+    dataStoreLen={}
+
+    # Sending buffer to handle large payloads effeciently.
+
     sendBuffer={}
 
     try:
@@ -711,7 +723,8 @@ def main():
                         fdmap[clientsock.fileno()]=clientsock
 
                         addrmap[clientsock]=clientaddr[0] # fds -> cliendsock
-                        dataStore[clientsock]=''          # MUST be initialized
+                        dataStore[clientsock]=[]          # MUST be initialized
+                        dataStoreLen[clientsock]=0        # MUST be initialized
                         Statistics['Connections']=Statistics.get('Connections', 0)+1
                     except:
                         continue
@@ -729,6 +742,7 @@ def main():
                         if fds in dataStore:
                             MaxDataHoldSize += len(dataStore[fds])
                             dataStore.pop(fds, None)
+                            dataStoreLen.pop(fds, None)
 
                         if fds in sendBuffer:
                             sendBuffer.pop(fds, None)
@@ -739,9 +753,11 @@ def main():
                         fds.close()
                         continue
 
-                    if len(dataStore[fds])+len(data) > MaxPayloadSize:
-                        MaxDataHoldSize += len(dataStore.get(fds, ''))
+                    # Enforce maximum payload size
+                    if dataStoreLen[fds]+len(data) > MaxPayloadSize:
+                        MaxDataHoldSize += dataStoreLen[fds]
                         dataStore.pop(fds, None)
+                        dataStoreLen.pop(fds, None)
                         sendBuffer.pop(fds, None)
 
                         poller.unregister(fds)
@@ -760,10 +776,12 @@ def main():
                     except:
                         continue
 
-                    dataStore[fds]+=data
+                    dataStore[fds].append(data)
+                    dataStoreLen[fds]+=len(data)
 
-                    if dataStore[fds] and dataStore[fds].endswith('\n'):
-                        response=ProcessPayload(addrmap[fds],dataStore[fds])
+                    if data.endswith('\n'):
+                        dstr="".join(dataStore[fds])
+                        response=ProcessPayload(addrmap[fds],dstr)
                         sendBuffer[fds]=response.encode('utf-8')
                         poller.modify(fds, select.POLLOUT)
 
@@ -784,8 +802,9 @@ def main():
                             sendBuffer.pop(fds, None)
 
                             if fds in dataStore:
-                                MaxDataHoldSize += len(dataStore[fds])
+                                MaxDataHoldSize += dataStoreLen[fds]
                                 dataStore.pop(fds, None)
+                                dataStoreLen.pop(fds, None)
 
                             poller.unregister(fds)
                             fdmap.pop(fd, None)
@@ -798,8 +817,9 @@ def main():
                 elif event & (select.POLLHUP | select.POLLERR):
                     Statistics['BadConn']=Statistics.get('BadConn', 0)+1
                     if fds in dataStore:
-                        MaxDataHoldSize += len(dataStore[fds])
+                        MaxDataHoldSize += dataStoreLen[fds]
                         dataStore.pop(fds, None)
+                        dataStoreLen.pop(fds, None)
 
                     if fds in sendBuffer:
                         sendBuffer.pop(fds, None)
