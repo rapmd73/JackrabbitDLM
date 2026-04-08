@@ -59,7 +59,10 @@ for line in lines:
     for d in data:
         k,v=d.split(':')
         k=k.strip()
-        v=int(v.strip())
+        try:
+            v=int(v.strip())
+        except:
+            v=float(v.strip())
         stats[k]=v
 
     Dates[dt]=stats
