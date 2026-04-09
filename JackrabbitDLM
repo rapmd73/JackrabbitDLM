@@ -39,17 +39,19 @@ sys.path.append('/home/JackrabbitDLM')
 import os
 import gc
 import psutil
+import secrets
 import time
 from datetime import datetime
 import socket
 import select
 import json
 
-Version="0.0.0.2.570"
+Version="0.0.0.2.590"
 BaseDirectory="/home/JackrabbitDLM"
 ConfigDirectory=f"{BaseDirectory}/Config"
 DiskDirectory=f"{BaseDirectory}/Disk"
 LogDirectory=f"{BaseDirectory}/Logs"
+QuarantineDirectory=f"{BaseDirectory}/Quarantine"
 
 # Most expensive part of the code, excluding disk operations. Making this global has
 # doubled throughput. These two items are brutal in context of processing throughput.
@@ -193,8 +195,11 @@ def WriteLog(msg):
     fh.close()
 
 def WriteError(err,addr,payload):
-    msg=f"DLMerror/{err}: ({addr}) "+json.dumps(payload)
+    id=secrets.token_urlsafe(73)
+    fname=f"{QuarantineDirectory}/{id}.db"
+    msg=f"DLMerror/{err}: {addr}/{fname}"
     WriteLog(msg)
+    WriteFile(fname,json.dumps(payload))
 
 # Write a file to disk
 
@@ -636,8 +641,11 @@ def main():
     global Locker
     global MaxDataHoldSize
 
+    # Create the needed directories
+
     os.makedirs(DiskDirectory,exist_ok=True)
     os.makedirs(LogDirectory,exist_ok=True)
+    os.makedirs(QuarantineDirectory,exist_ok=True)
 
     OldHour=-1
 
@@ -741,6 +749,7 @@ def main():
                     if not data:
                         if fds in dataStore:
                             MaxDataHoldSize += len(dataStore[fds])
+                            dataStore[fds]=None # Flush memory used immediately
                             dataStore.pop(fds, None)
                             dataStoreLen.pop(fds, None)
 
@@ -756,6 +765,7 @@ def main():
                     # Enforce maximum payload size
                     if dataStoreLen[fds]+len(data) > MaxPayloadSize:
                         MaxDataHoldSize += dataStoreLen[fds]
+                        dataStore[fds]=None # Flush memory used immediately
                         dataStore.pop(fds, None)
                         dataStoreLen.pop(fds, None)
                         sendBuffer.pop(fds, None)
@@ -783,6 +793,7 @@ def main():
                         dstr="".join(dataStore[fds])
                         response=ProcessPayload(addrmap[fds],dstr)
                         sendBuffer[fds]=response.encode('utf-8')
+                        dstr=None # Flush memory
                         poller.modify(fds, select.POLLOUT)
 
                 # Write event using send()
@@ -803,6 +814,7 @@ def main():
 
                             if fds in dataStore:
                                 MaxDataHoldSize += dataStoreLen[fds]
+                                dataStore[fds]=None # Flush memory used immediately
                                 dataStore.pop(fds, None)
                                 dataStoreLen.pop(fds, None)
 
@@ -818,6 +830,7 @@ def main():
                     Statistics['BadConn']=Statistics.get('BadConn', 0)+1
                     if fds in dataStore:
                         MaxDataHoldSize += dataStoreLen[fds]
+                        dataStore[fds]=None # Flush memory used immediately
                         dataStore.pop(fds, None)
                         dataStoreLen.pop(fds, None)
 
@@ -840,7 +853,9 @@ def main():
             # Purge expired
             now=time.time()
             for k in list(Locker):
-                if now > Locker[k]['Expire']:
+                # Search for expired data.  This is VERY fast when focusing on only 1
+                # aspect. This cascading layer heps filter quickly what is NOT wanted.
+                if now>Locker[k]['Expire']:
                     if 'DataStore' in Locker[k]:
                         if Locker[k]['DataStore'] is not None:
                             if 'Disk' in Locker[k]:
@@ -856,17 +871,18 @@ def main():
                 # Count the active enty only
                 if k in Locker:
                     if 'DataStore' in Locker[k]:
-                        Statistics['AData'] += 1
+                        Statistics['AData']+=1
                     else:
-                        Statistics['ALock'] += 1
+                        Statistics['ALock']+=1
 
             # Log the statistics
-            ct=datetime.now()
-            if ct.hour != OldHour and len(Statistics)>0:
-                OldHour=ct.hour
+            if now-OldHour>3600 and len(Statistics)>0:
+                OldHour=now
                 MemoryOverloadCheck()
                 s=', '.join(f"{k}: {v}" for k,v in sorted(Statistics.items()) if v>0)
                 WriteLog(s)
+                # Rebuild the main Locker structure to remove fragmentation.
+                Locker=dict(Locker)
                 Statistics={}
 
             # Check for a foced GC run. Keep the system as lean as possible.
@@ -874,7 +890,7 @@ def main():
                 # Force GC to clean
                 Statistics['ForcedGC']=Statistics.get('ForcedGC', 0)+1
                 MaxDataHoldSize=0
-                gc.collect()
+                gc.collect(2) # Force a full collection
     except Exception as err:
         print(err)
         # Try to catch everything and get the last bit of statstics.
