@@ -118,7 +118,7 @@ while c<m:
                         # The block should test Jackrabbit DLM's ability to
                         # require block size identty.
                         data=str(os.urandom(random.randint(8,768)*1024))
-                        res=Junker.Put(data=data,expire=random.randint(3,300))
+                        res=Junker.Put(data=data,expire=random.randint(3,60))
                         if Junker.Error:
                             k+=1
                     rn=random.random()

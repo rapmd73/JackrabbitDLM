@@ -46,7 +46,7 @@ import socket
 import select
 import json
 
-Version="0.0.0.2.590"
+Version="0.0.0.2.620"
 BaseDirectory="/home/JackrabbitDLM"
 ConfigDirectory=f"{BaseDirectory}/Config"
 DiskDirectory=f"{BaseDirectory}/Disk"
@@ -612,7 +612,7 @@ def ProcessPayload(addr,data):
             Locker[FileName].pop('Disk',None)
 
             # I could test for 'Disk', but a DataStore can move back and forth from
-            # disk to ram. The cost in minimal just to check the disk
+            # disk to ram. The cost is minimal just to check the disk
             # (security/leakage).
 
             if os.path.exists(Sanitize(FileName)):
@@ -748,7 +748,7 @@ def main():
 
                     if not data:
                         if fds in dataStore:
-                            MaxDataHoldSize += len(dataStore[fds])
+                            MaxDataHoldSize+=dataStoreLen[fds]
                             dataStore[fds]=None # Flush memory used immediately
                             dataStore.pop(fds, None)
                             dataStoreLen.pop(fds, None)
@@ -764,7 +764,7 @@ def main():
 
                     # Enforce maximum payload size
                     if dataStoreLen[fds]+len(data) > MaxPayloadSize:
-                        MaxDataHoldSize += dataStoreLen[fds]
+                        MaxDataHoldSize+=dataStoreLen[fds]
                         dataStore[fds]=None # Flush memory used immediately
                         dataStore.pop(fds, None)
                         dataStoreLen.pop(fds, None)
@@ -813,7 +813,7 @@ def main():
                             sendBuffer.pop(fds, None)
 
                             if fds in dataStore:
-                                MaxDataHoldSize += dataStoreLen[fds]
+                                MaxDataHoldSize+=dataStoreLen[fds]
                                 dataStore[fds]=None # Flush memory used immediately
                                 dataStore.pop(fds, None)
                                 dataStoreLen.pop(fds, None)
@@ -829,7 +829,7 @@ def main():
                 elif event & (select.POLLHUP | select.POLLERR):
                     Statistics['BadConn']=Statistics.get('BadConn', 0)+1
                     if fds in dataStore:
-                        MaxDataHoldSize += dataStoreLen[fds]
+                        MaxDataHoldSize+=dataStoreLen[fds]
                         dataStore[fds]=None # Flush memory used immediately
                         dataStore.pop(fds, None)
                         dataStoreLen.pop(fds, None)
@@ -881,8 +881,14 @@ def main():
                 MemoryOverloadCheck()
                 s=', '.join(f"{k}: {v}" for k,v in sorted(Statistics.items()) if v>0)
                 WriteLog(s)
-                # Rebuild the main Locker structure to remove fragmentation.
+
+                # Rebuild dictionaries to remove fragmentation.
                 Locker=dict(Locker)
+                dataStore=dict(dataStore)
+                dataStoreLen=dict(dataStoreLen)
+                sendBuffer=dict(sendBuffer)
+                fdmap=dict(fdmap)
+                addrmap=dict(addrmap)
                 Statistics={}
 
             # Check for a foced GC run. Keep the system as lean as possible.
@@ -890,7 +896,7 @@ def main():
                 # Force GC to clean
                 Statistics['ForcedGC']=Statistics.get('ForcedGC', 0)+1
                 MaxDataHoldSize=0
-                gc.collect(2) # Force a full collection
+                gc.collect()
     except Exception as err:
         print(err)
         # Try to catch everything and get the last bit of statstics.
