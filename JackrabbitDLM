@@ -32,83 +32,13 @@
 
 # NOTES:
 
-#   At some point, i need to figure out memory and disk space consumption and limits
-
-### NOTES:
-
-# In Python, the standard advice to favor "".join() over += is based entirely on CPU
-# performance, while completely ignoring the Resident Set Size (RSS) catastrophe that
-# occurs when handling strings. When you use append() to build a list and join() to
-# collapse it, you are creating a "Pointer Minefield." Each item in your list is a
-# discrete object with its own header, metadata, and memory address scattered across
-# Python’s heap. Even worse, the list itself is an array of 8-byte pointers that
-# requires its own contiguous block. This fragmentation is a "hot disaster": because
-# these thousands of small objects are interleaved with other long-lived program data
-# in 256KB "arenas," the Python memory manager can almost never find a completely
-# empty block to return to the Operating System. Your RSS swells and stays bloated
-# because a single "zombie" pointer can pin an entire page of memory indefinitely.
-
-# The "speed" of join() is essentially a debt paid in memory that you can never
-# reclaim. During the join() operation, Python must calculate the total length,
-# allocate a massive new block for the result, and briefly hold both the original list
-# of objects and the new giant string in RAM simultaneously. This creates a massive
-# peak memory spike that often pushes the process into swap or triggers an OOM (Out of
-# Memory) killer. Because the allocator sees this as a flurry of small-to-medium
-# allocations (the list elements) followed by one giant one, the heap becomes so
-# fragmented that even setting the list to None doesn't help. The C allocator (libc)
-# keeps those fragmented "holes" in its internal cache, assuming you'll need them
-# again, effectively hiding that memory from the OS forever.
-
-# In contrast, using += with a Reference Count of 1 leverages a specific CPython
-# optimization that transforms a "slow" operation into a memory-management miracle for
-# large data. When Python resizes a single, unique string, it uses realloc(). For
-# strings over 512 bytes, the system allocator often bypasses the standard heap and
-# uses a direct mmap from the kernel. Because there is only one object and one
-# address, there are no scattered pointers to fragment the heap. When that single
-# string is finally set to None, the hole left behind is so large and "clean" that the
-# allocator is forced to hand the memory back to the OS immediately.
-
-# Ultimately, the trade-off is a net loss for the join() method in any long-running or
-# memory-constrained environment. While join can result is incredible performance
-# increase in your execution time, it leaves the program’s RSS in an uncontrollable,
-# ever-climbing state that eventually degrades system performance or crashes the app.
-# By choosing += for large-scale string building, you trade a marginal amount of CPU
-# time for the ability to actually release gigabytes of memory, ensuring your program
-# remains a "good citizen" to the operating system.
-
-### Testing:
-
-# Command used for both tests:
+# json package is able to completely defragment a dictionary. BUT:
 #
-# ./LockWars 10 100000 aggressive locks
-
-# First test using append()/join():
+#   The key MUST be strings
 #
-# F  1814762 1431.81558943 511085  23823  23823  16750 95.55      0 100000
-# F  1814766 1431.79049850 512700  23830  23830  15176 95.56      0 100000
-# F  1814754 1431.82662892 523987  23794  23794   3838 95.66      0 100000
-# F  1814758 1431.81408381 511596  23762  23762  16314 95.56      0 100000
-# F  1814770 1431.79426455 525252  23706  23706   3053 95.68      0 100000
-# F  1814756 1431.83076501 512298  23737  23737  15866 95.57      0 100000
-# F  1814760 1431.83031750 524734  23747  23747   3302 95.67      0 100000
-# F  1814764 1431.82901478 520998  23797  23797   6843 95.63      0 100000
-# F  1814752 1431.83687925 514342  23743  23743  13662 95.59      0 100000
-# F  1814768 1431.80709577 523039  23706  23706   5197 95.66      0 100000
+#   NEVER use a socket descriptor as a key. Python allows it, but the json package
+#   does NOT.
 
-# Second test using string concatenation (+=)
-#
-# F  1833632 683.68759823 372624  15862  15862  12023 95.92      0 100000
-# F  1833630 683.69788003 371764  15757  15757  13143 95.93      0 100000
-# F  1833618 683.72272754 371434  15750  15750  13555 95.93      0 100000
-# F  1833622 683.72882199 370722  15846  15846  13901 95.90      0 100000
-# F  1833626 683.70253515 381953  15850  15850   2700 96.02      0 100000
-# F  1833634 683.70600772 374474  15774  15774  10413 95.96      0 100000
-# F  1833628 683.73211479 369314  15795  15795  15634 95.90      0 100000
-# F  1833636 683.70795703 382105  15790  15790   2699 96.03      0 100000
-# F  1833620 683.73796964 380093  15819  15819   4662 96.00      0 100000
-# F  1833624 683.74066281 373457  15839  15839  11271 95.93      0 100000
-
-# YES, test 1 (append/join) actually took long even though is haf high TPS.
 
 import sys
 sys.path.append('/home/JackrabbitDLM')
@@ -122,7 +52,7 @@ import socket
 import select
 import json
 
-Version="0.0.0.2.700"
+Version="0.0.0.2.820"
 BaseDirectory="/home/JackrabbitDLM"
 ConfigDirectory=f"{BaseDirectory}/Config"
 DiskDirectory=f"{BaseDirectory}/Disk"
@@ -200,6 +130,21 @@ def dlmDecode(encoded_str):
         return bytes(DECODE_TABLE[encoded_str[i:i+2]] for i in range(0, len(encoded_str), 2))
     except:
         return b""
+
+# Rebuild (defragment) any dictionary.
+
+def RebuildDictionary(d):
+    if not d or d=={}:
+        return {}
+
+    try:
+        # Side effect, ALL keys become strings.
+        return json.loads(json.dumps(d))
+    except Exception as err:
+        # json library hates sockets...
+        nd={str(k): v for k, v in d.items()}
+        return nd
+    return {}
 
 # Check memory usage, return true is above threshold. This is expensive. The DLM
 # literally has 3x the throughput WITHOUT this function.
@@ -392,18 +337,20 @@ def ProcessPayload(addr,data):
     global Locker
     global MaxDataHoldSize
 
-    # Build the data string from a list. Doing this here keep the memory "flushable".
-    # This works because this is NOT the main function of the program. For a server,
-    # keeping the main loop tight in python is critical.
+    # Build the total string.
+    data="".join(data)
 
-    # Decode the payload
-    data=dlmDecode(data.strip())
+    # Decode the payload, if encoded.
+    if data.startswith('{') and data.endswith('}'):
+        data=data.strip().decode('utf-8')
+    else:
+        data=dlmDecode(data.strip()).decode('utf-8')
 
     try:
         dataDB=json.loads(data)
     except: # damaged payload
         Statistics['BadPayload']=Statistics.get('BadPayload',0)+1
-        WriteError("Payload",addr,json.dumps(dataDB))
+        WriteError("Payload",addr,data)
         return jsonStatus("BadPayload")
 
     # Find the lock
@@ -692,7 +639,7 @@ def ProcessPayload(addr,data):
             Locker[FileName].pop('Disk',None)
 
             # I could test for 'Disk', but a DataStore can move back and forth from
-            # disk to ram. The cost is minimal just to check the disk
+            # disk to ram. The cost in minimal just to check the disk
             # (security/leakage).
 
             if os.path.exists(Sanitize(FileName)):
@@ -749,6 +696,7 @@ def main():
     # .append().join() for a 100 MB payload.
 
     dataStore={}
+    dataStoreLen={}
 
     # Sending buffer to handle large payloads effeciently.
 
@@ -776,7 +724,8 @@ def main():
     poller.register(lockerSocket, select.POLLIN)
     fdmap[lockerSocket.fileno()]=lockerSocket
 
-    try:
+#    try:
+    if True:
         while True:
             # 30 decond timeout for IDLE
             events=poller.poll(30000)
@@ -796,7 +745,13 @@ def main():
 
             # Event loop
             for fd, event in events:
-                fds=fdmap.get(fd)
+                # fds   = socket
+                # fd    = int
+                # strfd = string of fd
+
+                strfd=str(fd)
+
+                fds=fdmap.get(strfd)
                 if fds is None:
                     continue
 
@@ -806,11 +761,18 @@ def main():
                         clientsock, clientaddr=fds.accept()
                         clientsock.setblocking(0)
 
-                        poller.register(clientsock, select.POLLIN)
-                        fdmap[clientsock.fileno()]=clientsock
+                        # Pick up new fd from ACTIVE connection. do NOT destroy
+                        # upper loop.
 
-                        addrmap[clientsock]=clientaddr[0] # fds -> cliendsock
-                        dataStore[clientsock]=''          # MUST be initialized
+                        nfd=str(clientsock.fileno())
+
+                        poller.register(clientsock, select.POLLIN)
+                        fdmap[nfd]=clientsock
+                        addrmap[nfd]=clientaddr[0] # fds -> cliendsock
+
+                        # Use nfd (string) NOT fds (socket)
+                        dataStore[nfd]=[]                  # MUST be initialized
+                        dataStoreLen[nfd]=0                # MUST be initialized
                         Statistics['Connections']=Statistics.get('Connections', 0)+1
                     except:
                         continue
@@ -825,28 +787,33 @@ def main():
                         pass
 
                     if not data:
-                        if fds in dataStore:
-                            MaxDataHoldSize+=len(dataStore[fds])
-                            dataStore.pop(fds, None)
+                        if strfd in dataStore:
+                            MaxDataHoldSize+=len(dataStore[strfd])
+                            dataStore[strfd]=None # Flush memory used immediately
+                            dataStore.pop(strfd, None)
+                            dataStoreLen.pop(strfd, None)
 
-                        if fds in sendBuffer:
-                            sendBuffer.pop(fds, None)
+                        if strfd in sendBuffer:
+                            sendBuffer.pop(strfd, None)
 
                         poller.unregister(fds)
-                        fdmap.pop(fd, None)
-                        addrmap.pop(fd, None)
+
+                        fdmap.pop(strfd, None)
+                        addrmap.pop(strfd, None)
                         fds.close()
                         continue
 
                     # Enforce maximum payload size
-                    if len(dataStore[fds])+len(data) > MaxPayloadSize:
-                        MaxDataHoldSize+=len(dataStore[fds])
-                        dataStore.pop(fds, None)
-                        sendBuffer.pop(fds, None)
+                    if dataStoreLen.get(strfd,0)+len(data) > MaxPayloadSize:
+                        MaxDataHoldSize+=dataStoreLen[strfd]
+                        dataStore[strfd]=None # Flush memory used immediately
+                        dataStore.pop(strfd, None)
+                        dataStoreLen.pop(strfd, None)
+                        sendBuffer.pop(strfd, None)
 
                         poller.unregister(fds)
-                        fdmap.pop(fd, None)
-                        addrmap.pop(fd, None)
+                        fdmap.pop(strfd, None)
+                        addrmap.pop(strfd, None)
                         fds.close()
 
                         Statistics['DataOverrun']=Statistics.get('DataOverrun', 0)+1
@@ -860,37 +827,39 @@ def main():
                     except:
                         continue
 
-                    dataStore[fds]+=data
+                    dataStore[strfd].append(data)
+                    dataStoreLen[strfd]+=len(data)
 
                     if data.endswith('\n'):
-                        response=ProcessPayload(addrmap[fds],dataStore[fds])
-                        sendBuffer[fds]=response.encode('utf-8')
-                        # Set up for sending answer
+                        response=ProcessPayload(addrmap[strfd],dataStore[strfd])
+                        sendBuffer[strfd]=response.encode('utf-8')
                         poller.modify(fds, select.POLLOUT)
 
                 # Write event using send()
                 elif event & select.POLLOUT:
                     actout+=1
-                    if fds in sendBuffer:
+                    if strfd in sendBuffer:
                         try:
-                            sent=fds.send(sendBuffer[fds])
+                            sent=fds.send(sendBuffer[strfd])
                         except:
                             sent=0
 
                         if sent > 0:
-                            sendBuffer[fds]=sendBuffer[fds][sent:]
+                            sendBuffer[strfd]=sendBuffer[strfd][sent:]
 
                         # If all data sent, close connection (same behavior as original)
-                        if not sendBuffer[fds]:
-                            sendBuffer.pop(fds, None)
+                        if not sendBuffer[strfd]:
+                            sendBuffer.pop(strfd, None)
 
-                            if fds in dataStore:
-                                MaxDataHoldSize+=len(dataStore[fds])
-                                dataStore.pop(fds, None)
+                            if strfd in dataStore:
+                                MaxDataHoldSize+=dataStoreLen[strfd]
+                                dataStore[strfd]=None # Flush memory used immediately
+                                dataStore.pop(strfd, None)
+                                dataStoreLen.pop(strfd, None)
 
                             poller.unregister(fds)
-                            fdmap.pop(fd, None)
-                            addrmap.pop(fd, None)
+                            fdmap.pop(strfd, None)
+                            addrmap.pop(strfd, None)
                             fds.close()
 
                             Statistics['Out']=Statistics.get('Out', 0)+1
@@ -898,16 +867,18 @@ def main():
                 # Error / hangup
                 elif event & (select.POLLHUP | select.POLLERR):
                     Statistics['BadConn']=Statistics.get('BadConn', 0)+1
-                    if fds in dataStore:
-                        MaxDataHoldSize+=len(dataStore[fds])
-                        dataStore.pop(fds, None)
+                    if strfd in dataStore:
+                        MaxDataHoldSize+=dataStoreLen[strfd]
+                        dataStore[strfd]=None # Flush memory used immediately
+                        dataStore.pop(strfd, None)
+                        dataStoreLen.pop(strfd, None)
 
-                    if fds in sendBuffer:
-                        sendBuffer.pop(fds, None)
+                    if strfd in sendBuffer:
+                        sendBuffer.pop(strfd, None)
 
                     poller.unregister(fds)
-                    fdmap.pop(fd, None)
-                    addrmap.pop(fd, None)
+                    fdmap.pop(strfd, None)
+                    addrmap.pop(strfd, None)
                     fds.close()
 
             # Active in/out events
@@ -949,13 +920,13 @@ def main():
                 MemoryOverloadCheck()
                 s=', '.join(f"{k}: {v}" for k,v in sorted(Statistics.items()) if v>0)
                 WriteLog(s)
-
-                # Rebuild dictionaries to remove fragmentation.
-                Locker=dict(Locker)
-                dataStore=dict(dataStore)
-                sendBuffer=dict(sendBuffer)
-                fdmap=dict(fdmap)
-                addrmap=dict(addrmap)
+                # Rebuild the main Locker structure to remove fragmentation.
+                Locker=RebuildDictionary(Locker)
+                dataStore=RebuildDictionary(dataStore)
+                dataStoreLen=RebuildDictionary(dataStoreLen)
+                sendBuffer=RebuildDictionary(sendBuffer)
+                fdmap=RebuildDictionary(fdmap)
+                addrmap=RebuildDictionary(addrmap)
                 Statistics={}
 
             # Check for a foced GC run. Keep the system as lean as possible.
@@ -963,16 +934,18 @@ def main():
                 # Force GC to clean
                 Statistics['ForcedGC']=Statistics.get('ForcedGC', 0)+1
                 MaxDataHoldSize=0
-                gc.collect()
+                gc.collect(2) # Force a full collection
+    """
     except Exception as err:
-        print(err)
+        print("Error:",err)
         # Try to catch everything and get the last bit of statstics.
         MemoryOverloadCheck()
         s=', '.join(f"{k}: {v}" for k,v in sorted(Statistics.items()) if v>0)
         WriteLog(s)
+    """
 
 ###
-### Main driver
+### Start Program
 ###
 
 if __name__ == '__main__':
@@ -981,3 +954,5 @@ if __name__ == '__main__':
 ###
 ### End program
 ###
+
+
