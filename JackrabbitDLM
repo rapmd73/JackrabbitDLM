@@ -39,7 +39,6 @@
 #   NEVER use a socket descriptor as a key. Python allows it, but the json package
 #   does NOT.
 
-
 import sys
 sys.path.append('/home/JackrabbitDLM')
 import os
@@ -52,7 +51,7 @@ import socket
 import select
 import json
 
-Version="0.0.0.2.820"
+Version="0.0.0.2.821"
 BaseDirectory="/home/JackrabbitDLM"
 ConfigDirectory=f"{BaseDirectory}/Config"
 DiskDirectory=f"{BaseDirectory}/Disk"
@@ -341,10 +340,7 @@ def ProcessPayload(addr,data):
     data="".join(data)
 
     # Decode the payload, if encoded.
-    if data.startswith('{') and data.endswith('}'):
-        data=data.strip().decode('utf-8')
-    else:
-        data=dlmDecode(data.strip()).decode('utf-8')
+    data=dlmDecode(data.strip()).decode('utf-8')
 
     try:
         dataDB=json.loads(data)
