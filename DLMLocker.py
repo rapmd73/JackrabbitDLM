@@ -8,6 +8,7 @@
 import sys
 sys.path.append('/home/JackrabbitDLM')
 import os
+import copy
 import datetime
 import time
 import random
@@ -27,7 +28,7 @@ import secrets
 class Locker:
     # Initialize the file name
     def __init__(self, filename, Retry=7, RetrySleep=1, Timeout=300, ID=None, Host='', Port=37373, Encoder=None, Decoder=None, name=None, identity=None):
-        self.VERSION="0.0.0.1.530"
+        self.VERSION="0.0.0.1.580"
         self.ulResp=['badpayload','locked','unlocked','notowner','notfound','version','no']
 
         # Encoding String
@@ -69,6 +70,45 @@ class Locker:
         if not encoded_str:
             return b""
         return bytes(self.DECODE_TABLE[encoded_str[i:i+2]] for i in range(0, len(encoded_str), 2))
+
+    # This function has no practical value in ordinary processing because JSON key
+    # order carries no meaning at all. From serialization to transmission to
+    # reconstruction, the data is interpreted identically regardless of how keys
+    # are arranged, making their order effectively worthless in any functional
+    # sense. Its only purpose is during transmission, where it ensures that the
+    # outward structure of the payload never appears in a consistent or easily
+    # recognizable pattern, preventing simple positional targeting or assumptions
+    # by an observer. The data itself is unchanged, but its presentation is
+    # deliberately unstable, forcing full parsing instead of shortcut analysis.
+    # This is a form of obfuscation rather than true security, yet the cost is
+    # negligible, on the order of 0.0007 seconds for roughly 100 keys, while adding
+    # friction to anyone attempting to inspect or exploit the stream. In practice,
+    # the objective is not to make attacks impossible, but to increase the effort
+    # required to a point where the value of the data no longer justifies the work.
+
+    def ShuffleJSON(self,payload):
+        def RandomJSON(obj):
+            if isinstance(obj, dict):
+                items=list(obj.items())
+                random.shuffle(items)
+
+                new_dict={}
+                for k, v in items:
+                    new_dict[k]=RandomJSON(v)
+                return new_dict
+
+            elif isinstance(obj, list):
+                return [RandomJSON(item) for item in obj]
+
+            else:
+                return obj
+
+        if isinstance(payload,str):
+            data=json.loads(payload)
+        else:
+            data=payload
+
+        return RandomJSON(data)
 
     # Generate an ID String
 
@@ -126,7 +166,7 @@ class Locker:
             payload['Name']=self.name
             payload['Identity']=self.identity
 
-        outbuf=json.dumps(payload)
+        outbuf=json.dumps(self.ShuffleJSON(payload))
 
         retry=0
         done=False
@@ -166,7 +206,7 @@ class Locker:
             payload['Name']=self.name
             payload['Identity']=self.identity
 
-        outbuf=json.dumps(payload)
+        outbuf=json.dumps(self.ShuffleJSON(payload))
 
         retry=0
         done=False
@@ -272,4 +312,3 @@ class Locker:
 ###
 ### END Library
 ###
-

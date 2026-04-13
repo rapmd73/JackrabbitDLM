@@ -5,12 +5,17 @@
 # 2021 Copyright © Robert APM Darin
 # All rights reserved unconditionally.
 
-# This code is a program designed to manage locks and data storage in a system.
-# It allows users to lock and unlock resources, as well as store, retrieve, and
-# erase data associated with those resources. The program operates by listening
-# for incoming requests on a specific port, processing these requests based on
-# the actions specified (like locking or unlocking), and maintaining a record
-# of active locks and their expiration times.
+### If you want REAL security, CHANGE the en(de)coder here and in the DLMLocker.py
+
+## This program demonstrates ZERO effort security that is effective an a large
+## number of cases that really shouldn't ever happen.
+
+# This code is a program designed to manage locks and data storage in a system. It
+# allows users to lock and unlock resources, as well as store, retrieve, and erase
+# data associated with those resources. The program operates by listening for
+# incoming requests on a specific port, processing these requests based on the
+# actions specified (like locking or unlocking), and maintaining a record of active
+# locks and their expiration times.
 
 # REQUIRED AT ALL TIMES (see client library for details:
 #   ID, FileName, Action, Expire
@@ -44,6 +49,7 @@ sys.path.append('/home/JackrabbitDLM')
 import os
 import gc
 import psutil
+import random
 import secrets
 import time
 from datetime import datetime
@@ -51,7 +57,7 @@ import socket
 import select
 import json
 
-Version="0.0.0.2.821"
+Version="0.0.0.2.830"
 BaseDirectory="/home/JackrabbitDLM"
 ConfigDirectory=f"{BaseDirectory}/Config"
 DiskDirectory=f"{BaseDirectory}/Disk"
@@ -129,6 +135,49 @@ def dlmDecode(encoded_str):
         return bytes(DECODE_TABLE[encoded_str[i:i+2]] for i in range(0, len(encoded_str), 2))
     except:
         return b""
+
+# This function has no practical value in ordinary processing because JSON key
+# order carries no meaning at all. From serialization to transmission to
+# reconstruction, the data is interpreted identically regardless of how keys
+# are arranged, making their order effectively worthless in any functional
+# sense. Its only purpose is during transmission, where it ensures that the
+# outward structure of the payload never appears in a consistent or easily
+# recognizable pattern, preventing simple positional targeting or assumptions
+# by an observer. The data itself is unchanged, but its presentation is
+# deliberately unstable, forcing full parsing instead of shortcut analysis.
+# This is a form of obfuscation rather than true security, yet the cost is
+# negligible, on the order of 0.0007 seconds for roughly 100 keys, while adding
+# friction to anyone attempting to inspect or exploit the stream. In practice,
+# the objective is not to make attacks impossible, but to increase the effort
+# required to a point where the value of the data no longer justifies the work.
+
+# This is NOT security. It is a ZERO effort obfuscation that foccuses on the
+# network transport layer ONLY between 2 points. This is the kind of low skill
+# method that gets exploited by script kiddies...
+
+def ShuffleJSON(payload):
+    def RandomJSON(obj):
+        if isinstance(obj, dict):
+            items=list(obj.items())
+            random.shuffle(items)
+
+            new_dict={}
+            for k, v in items:
+                new_dict[k]=RandomJSON(v)
+            return new_dict
+
+        elif isinstance(obj, list):
+            return [RandomJSON(item) for item in obj]
+
+        else:
+            return obj
+
+    if isinstance(payload,str):
+        data=json.loads(payload)
+    else:
+        data=payload
+
+    return RandomJSON(data)
 
 # Rebuild (defragment) any dictionary.
 
@@ -251,7 +300,7 @@ def jsonStatus(str,id=None,Tag=None,Data=None):
     if Tag!=None and Data!=None:
         res[Tag]=Data
 
-    out=dlmEncode(json.dumps(res))
+    out=dlmEncode(json.dumps(ShuffleJSON(res)))
     return out+'\n'
 
 # Is it a number?
