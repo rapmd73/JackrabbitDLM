@@ -1,0 +1,22 @@
+# Jackrabbit DLM Configuration
+
+# Base directory for all runtime data.
+# Override with: export JACKRABBIT_BASE=/your/path
+# Default: /home/JackrabbitDLM
+# base_dir: /home/JackrabbitDLM
+
+# Server listen address
+# host: 0.0.0.0
+# port: 37373
+
+# Memory threshold (percentage of total RAM) for rejecting new data stores
+# memory_threshold: 33
+
+# Maximum TTL (seconds) for anonymous requests
+# max_ttl: 3543
+
+# Maximum payload size in bytes
+# max_payload_size: 10485760  # 10 MB
+
+# Maximum DataStore size for anonymous requests in bytes
+# max_datastore_size: 16384   # 16 KB
