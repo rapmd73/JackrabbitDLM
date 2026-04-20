@@ -180,21 +180,33 @@ stateDiagram-v2
 
 ### Data Flow (Put with Disk Spillover)
 
+**Critical:** At 33% RAM saturation, BOTH Lock and Put operations are disabled
+(server returns `NO`). Only Get, Unlock, and Erase continue working.
+
 Disk spillover threshold is **dynamic** -- starts at 16KB but drops to ~8KB
 under memory pressure. Three conditions trigger disk writes:
 
 ```mermaid
 flowchart TD
-    A[Client Put Request] --> B{Memory Check}
-    B -->|RAM > 33%| C[Return NO<br/>Memory Overloaded]
-    B -->|RAM ≤ 33%| D{Size vs Threshold}
+    A[Client Request] --> OP{Operation Type}
     
-    D -->|> 16KB + anonymous| E[Reject BadPayload]
-    D -->|> 16KB + auth| F{Size > Auth MaxSize?}
+    OP -->|"Lock / Put"| B{Memory Check}
+    OP -->|"Get / Unlock / Erase"| PROCESS[Process Normally]
+    
+    B -->|RAM ≥ 33%| C[Return NO<br/>⛔ Memory Overloaded]
+    B -->|RAM < 33%| D{Request: Lock or Put?}
+    
+    D -->|Lock| LOCK[Acquire Lock<br/>Store {ID, Expire}]
+    LOCK --> N[Return Done]
+    
+    D -->|Put| SIZE{Size vs Threshold}
+    
+    SIZE -->|> 16KB + anonymous| E[Reject BadPayload]
+    SIZE -->|> 16KB + auth| F{Size > Auth MaxSize?}
     F -->|Yes| E
     F -->|No| G[Force Disk]
     
-    D -->|≤ 16KB| H{TTL > 10s?}
+    SIZE -->|≤ 16KB| H{TTL > 10s?}
     H -->|Yes + > 16KB| G
     H -->|No| I{RAM > 16.5%?}
     
@@ -205,23 +217,25 @@ flowchart TD
     J -->|No| K[Store In-Memory]
     
     G --> L[Write to Disk<br/>encoded.db]
-    L --> M[Replace DataStore<br/>with 'OD' marker]
-    K --> N[Return Done]
+    L --> M[Replace DataStore<br/>'OD' marker]
+    K --> N
     M --> N
+    PROCESS --> N
 
+    style C fill:#f66,stroke:#333,color:#fff
     style G fill:#f96,stroke:#333
     style K fill:#6f9,stroke:#333
     style E fill:#f66,stroke:#333
-    style C fill:#f66,stroke:#333
 ```
 
-**Threshold Summary:**
+**Memory Pressure Zones:**
 
-| Condition | Spillover At |
-|-----------|-------------|
-| Normal (TTL > 10s) | > 16 KB |
-| RAM > 16.5% | > 16 KB |
-| RAM > 24.75% (pressure) | > 8 KB |
+| RAM Usage | Lock | Put | Get/Unlock/Erase | Disk Threshold |
+|-----------|------|-----|------------------|----------------|
+| < 16.5% | ✓ | ✓ | ✓ | 16 KB |
+| 16.5% - 24.75% | ✓ | ✓ | ✓ | 16 KB |
+| 24.75% - 33% | ✓ | ✓ | ✓ | **8 KB** |
+| **≥ 33%** | **NO** | **NO** | ✓ | n/a |
 
 ### Blind Vault Design
 
