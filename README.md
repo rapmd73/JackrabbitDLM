@@ -105,44 +105,48 @@ graph TB
 
 ### Request Flow (Sequence)
 
+**Important:** Locks and DataStores are separate entities with separate IDs.
+Use different `FileName` values for locks vs data (e.g. `"my_job"` for the lock,
+`"my_job:state"` for data). Unlocking does NOT erase data, and erasing does NOT unlock.
+
 ```mermaid
 sequenceDiagram
     participant C as Client (Locker)
     participant S as Server Daemon
-    participant R as Lock Registry
+    participant L as Lock Registry
     
-    Note over C,S: Connection Phase
-    C->>S: TCP Connect
-    S->>S: Register fd with poll()
-    
-    Note over C,S: Lock Acquisition
-    C->>S: {"Action":"Lock","FileName":"res","ID":"abc","Expire":"30"}
+    Note over C,S: Lock Acquisition (resource: "my_job")
+    C->>S: {"Action":"Lock","FileName":"my_job","ID":"lock-abc","Expire":"30"}
     S->>S: Decode payload
-    S->>R: Check if "res" exists
+    S->>L: Check if "my_job" exists
     alt Resource Free or Expired
-        R->>R: Store {ID:abc, Expire:now+30}
-        S->>C: {"Status":"Locked","ID":"abc"}
+        L->>L: Store {ID:lock-abc, Expire:now+30}
+        S->>C: {"Status":"Locked","ID":"lock-abc"}
     else Owned by Same ID
-        R->>R: Renew TTL
-        S->>C: {"Status":"Locked","ID":"abc"}
+        L->>L: Renew TTL
+        S->>C: {"Status":"Locked","ID":"lock-abc"}
     else Owned by Different ID
         S->>C: {"Status":"NotOwner"}
     end
     
-    Note over C,S: Data Operations
-    C->>S: {"Action":"Put","DataStore":"encoded","Expire":"60"}
-    S->>S: Check ownership & size
-    S->>R: Store data
-    S->>C: {"Status":"Done","ID":"abc"}
+    Note over C,S: Data Operations (separate resource: "my_job:state")
+    C->>S: {"Action":"Put","FileName":"my_job:state","ID":"data-xyz","DataStore":"encoded","Expire":"60"}
+    S->>S: Check size, memory pressure, ownership
+    S->>L: Store data entry (separate from lock)
+    S->>C: {"Status":"Done","ID":"data-xyz"}
     
-    C->>S: {"Action":"Get"}
-    S->>R: Retrieve data
+    C->>S: {"Action":"Get","FileName":"my_job:state","ID":"data-xyz","Expire":"0"}
+    S->>L: Retrieve data (lock untouched)
     S->>C: {"Status":"Done","DataStore":"encoded"}
     
-    Note over C,S: Cleanup
-    C->>S: {"Action":"Unlock"}
-    S->>R: Set Expire=0
+    Note over C,S: Cleanup (independent operations)
+    C->>S: {"Action":"Unlock","FileName":"my_job","ID":"lock-abc","Expire":"0"}
+    S->>L: Set Lock Expire=0 (data unchanged)
     S->>C: {"Status":"Unlocked"}
+    
+    C->>S: {"Action":"Erase","FileName":"my_job:state","ID":"data-xyz","Expire":"0"}
+    S->>L: Set Data Expire=0, delete disk file
+    S->>C: {"Status":"Done"}
     S->>S: Close connection
 ```
 
@@ -156,37 +160,68 @@ stateDiagram-v2
     Free --> Locked: Lock Request<br/>(new resource)
     
     Locked --> Locked: Re-lock by Owner<br/>(renew TTL)
-    Locked --> Locked: Put by Owner<br/>(update data)
     Locked --> NotOwner: Different ID tries Lock
     Locked --> Free: Unlock by Owner
     Locked --> Free: TTL Expires
-    Locked --> Free: Erase by Owner
     
     NotOwner --> Locked: Owner still holds
     NotOwner --> Free: TTL Expires
     
     Free --> [*]: Garbage Collection
+
+    note right of Locked
+        Locks and DataStores are SEPARATE.
+        A lock on "my_job" and data on
+        "my_job:state" have independent
+        lifecycles, IDs, and ownership.
+        Unlock ≠ Erase
+    end note
 ```
 
 ### Data Flow (Put with Disk Spillover)
 
+Disk spillover threshold is **dynamic** -- starts at 16KB but drops to ~8KB
+under memory pressure. Three conditions trigger disk writes:
+
 ```mermaid
-flowchart LR
+flowchart TD
     A[Client Put Request] --> B{Memory Check}
-    B -->|Over 33% RAM| C[Return NO]
-    B -->|Under 33%| D{DataStore Size}
-    D -->|≤ 16KB| E[Store In-Memory]
-    D -->|> 16KB| F{Authenticated?}
-    F -->|No| G[Reject: BadPayload]
-    F -->|Yes| H{Size > MaxSize?}
-    H -->|Yes| G
-    H -->|No| I{Force Disk?}
-    I -->|Yes| J[Write to Disk/<br/>encoded.db]
-    I -->|No| E
-    J --> K[Replace DataStore<br/>with 'OD' marker]
-    E --> L[Return Done]
-    K --> L
+    B -->|RAM > 33%| C[Return NO<br/>Memory Overloaded]
+    B -->|RAM ≤ 33%| D{Size vs Threshold}
+    
+    D -->|> 16KB + anonymous| E[Reject BadPayload]
+    D -->|> 16KB + auth| F{Size > Auth MaxSize?}
+    F -->|Yes| E
+    F -->|No| G[Force Disk]
+    
+    D -->|≤ 16KB| H{TTL > 10s?}
+    H -->|Yes + > 16KB| G
+    H -->|No| I{RAM > 16.5%?}
+    
+    I -->|Yes + > 16KB| G
+    I -->|No| J{RAM > 24.75%?}
+    
+    J -->|Yes + > 8KB| G
+    J -->|No| K[Store In-Memory]
+    
+    G --> L[Write to Disk<br/>encoded.db]
+    L --> M[Replace DataStore<br/>with 'OD' marker]
+    K --> N[Return Done]
+    M --> N
+
+    style G fill:#f96,stroke:#333
+    style K fill:#6f9,stroke:#333
+    style E fill:#f66,stroke:#333
+    style C fill:#f66,stroke:#333
 ```
+
+**Threshold Summary:**
+
+| Condition | Spillover At |
+|-----------|-------------|
+| Normal (TTL > 10s) | > 16 KB |
+| RAM > 16.5% | > 16 KB |
+| RAM > 24.75% (pressure) | > 8 KB |
 
 ### Blind Vault Design
 
