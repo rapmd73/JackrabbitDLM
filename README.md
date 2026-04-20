@@ -357,13 +357,23 @@ All communication is **newline-delimited JSON** over TCP. The JSON is encoded (d
 
 ### Authentication Rules
 
+**Critical:** If a resource was created WITH authentication (Name + Identity),
+ALL subsequent operations on that resource also require authentication — including
+Get and Erase. The `_check_identity()` function enforces this on every access.
+
 | Scenario | Auth Required? |
 |----------|----------------|
 | Lock/Unlock with TTL ≤ 3543s | No |
-| Lock/Unlock with TTL > 3543s | Yes (`Name` + `Identity`) |
+| Lock/Unlock with TTL > 3543s | **Yes** (`Name` + `Identity`) |
 | Put with DataStore ≤ 16KB | No |
-| Put with DataStore > 16KB | Yes (`Name` + `Identity`) |
-| Get/Erase | No (ownership checked by ID) |
+| Put with DataStore > 16KB | **Yes** (`Name` + `Identity`) |
+| Get/Erase on anonymous resource | No (ownership by ID only) |
+| **Get/Erase on authenticated resource** | **Yes** (`Name` + `Identity` must match) |
+
+**How it works:** When a resource is created with `Name` + `Identity`, those fields
+are stored in the lock entry. Every subsequent Get, Erase, or Put on that resource
+calls `_check_identity()` which compares the incoming `Name`/`Identity` against
+the stored values. Mismatch → `NotOwner`.
 
 > See also: [JSON (Wikipedia)](https://en.wikipedia.org/wiki/JSON), [TCP (Wikipedia)](https://en.wikipedia.org/wiki/Transmission_Control_Protocol), [Time to Live (Wikipedia)](https://en.wikipedia.org/wiki/Time_to_live)
 
