@@ -1,4 +1,10 @@
 *.pyc
-__pycache__
-TestCode
-TestCode/*
+__pycache__/
+*.egg-info/
+.eggs/
+dist/
+build/
+.venv/
+*.log
+*.pid
+data/
