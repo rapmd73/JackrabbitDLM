@@ -979,6 +979,13 @@ def main():
                 # Force GC to clean
                 Statistics['ForcedGC']=Statistics.get('ForcedGC', 0)+1
                 MaxDataHoldSize=0
+                # Rebuild the main Locker structure to remove fragmentation.
+                Locker=RebuildDictionary(Locker)
+                dataStore=RebuildDictionary(dataStore)
+                dataStoreLen=RebuildDictionary(dataStoreLen)
+                sendBuffer=RebuildDictionary(sendBuffer)
+                fdmap=RebuildDictionary(fdmap)
+                addrmap=RebuildDictionary(addrmap)
                 gc.collect(2) # Force a full collection
     """
     except Exception as err:
