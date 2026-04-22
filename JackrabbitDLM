@@ -57,7 +57,7 @@ import socket
 import select
 import json
 
-Version="0.0.0.2.830"
+Version="0.0.0.2.850"
 BaseDirectory="/home/JackrabbitDLM"
 ConfigDirectory=f"{BaseDirectory}/Config"
 DiskDirectory=f"{BaseDirectory}/Disk"
@@ -769,8 +769,7 @@ def main():
     poller.register(lockerSocket, select.POLLIN)
     fdmap[lockerSocket.fileno()]=lockerSocket
 
-#    try:
-    if True:
+    try:
         while True:
             # 30 decond timeout for IDLE
             events=poller.poll(30000)
@@ -987,14 +986,12 @@ def main():
                 fdmap=RebuildDictionary(fdmap)
                 addrmap=RebuildDictionary(addrmap)
                 gc.collect(2) # Force a full collection
-    """
     except Exception as err:
         print("Error:",err)
         # Try to catch everything and get the last bit of statstics.
         MemoryOverloadCheck()
         s=', '.join(f"{k}: {v}" for k,v in sorted(Statistics.items()) if v>0)
         WriteLog(s)
-    """
 
 ###
 ### Start Program
@@ -1006,5 +1003,3 @@ if __name__ == '__main__':
 ###
 ### End program
 ###
-
-
