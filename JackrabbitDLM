@@ -57,7 +57,7 @@ import socket
 import select
 import json
 
-Version="0.0.0.2.850"
+Version="0.0.0.2.855"
 BaseDirectory="/home/JackrabbitDLM"
 ConfigDirectory=f"{BaseDirectory}/Config"
 DiskDirectory=f"{BaseDirectory}/Disk"
@@ -210,7 +210,8 @@ def MemoryOverloadCheck(threshold_percent=MemoryThreshold):
     # Save the percentage statistics
     if usage_percent>Statistics.get('MemoryMax',0):
         Statistics['MemoryMax']=usage_percent
-    Statistics['MemoryUsage']=usage_percent
+    # Not really useful
+    #Statistics['MemoryUsage']=usage_percent
 
     if usage_percent>threshold_percent:
         return True,usage_percent
@@ -752,7 +753,7 @@ def main():
         lockerSocket.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1)
         lockerSocket.setblocking(0)
         lockerSocket.bind((host, port))
-        lockerSocket.listen(1024)
+        lockerSocket.listen(4096)
     except OSError as err:
         x=str(err)
         if 'Address already in use' in x:
