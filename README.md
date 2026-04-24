@@ -9,11 +9,6 @@
 / /_/ / /_/ / /__/ ,< / /  / /_/ / /_/ / /_/ / / /_   / /_/ / /___/ /  / /
 \____/\__,_/\___/_/|_/_/   \__,_/_.__/_.___/_/\__/  /_____/_____/_/  /_/
 
-    ____  __    __  ___
-   / __ \/ /   /  |/  /
-  / / / / /   / /|_/ /
- / /_/ / /___/ /  / /
-/_____/_____/_/  /_/
 ```
 
 > *High-Performance Distributed Lock Manager & Volatile State Coordinator*
@@ -190,16 +185,16 @@ under memory pressure. Three conditions trigger disk writes:
 flowchart TD
     A[Client Request] --> OP{Operation Type}
     
-    OP -->|"Lock / Put"| B{Memory Check}
-    OP -->|"Get / Unlock / Erase"| PROCESS[Process Normally]
+    OP -->|Lock / Put| B{Memory Check}
+    OP -->|Get / Unlock / Erase| PROCESS[Process Normally]
     
-    B -->|RAM ≥ 33%| C[Return NO<br/>⛔ Memory Overloaded]
+    B -->|RAM >= 33%| C["Return NO - Memory Overloaded"]
     B -->|RAM < 33%| D{Request: Lock or Put?}
     
-    D -->|Lock| LOCK[Acquire Lock<br/>Store {ID, Expire}]
+    D -->|Lock| LOCK["Acquire Lock - Store ID, Expire"]
     LOCK --> N[Return Done]
-    
-    D -->|Put| SIZE{Size vs Threshold}
+    D -->|Put| PUT[Store Data]
+    PUT --> N
     
     SIZE -->|> 16KB + anonymous| E[Reject BadPayload]
     SIZE -->|> 16KB + auth| F{Size > Auth MaxSize?}
