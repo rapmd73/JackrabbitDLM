@@ -9,11 +9,14 @@
 / /_/ / /_/ / /__/ ,< / /  / /_/ / /_/ / /_/ / / /_   / /_/ / /___/ /  / /
 \____/\__,_/\___/_/|_/_/   \__,_/_.__/_.___/_/\__/  /_____/_____/_/  /_/
 
+<<<<<<< HEAD
     ____  __    __  ___
    / __ \/ /   /  |/  /
   / / / / /   / /|_/ /
  / /_/ / /___/ /  / /
 /_____/_____/_/  /_/
+=======
+>>>>>>> origin/main
 ```
 
 > *High-Performance Distributed Lock Manager & Volatile State Coordinator*
@@ -190,6 +193,7 @@ under memory pressure. Three conditions trigger disk writes:
 flowchart TD
     A[Client Request] --> OP{Operation Type}
     
+<<<<<<< HEAD
     OP -->|"Lock / Put"| B{Memory Check}
     OP -->|"Get / Unlock / Erase"| PROCESS[Process Normally]
     
@@ -200,6 +204,18 @@ flowchart TD
     LOCK --> N[Return Done]
     
     D -->|Put| SIZE{Size vs Threshold}
+=======
+    OP -->|Lock / Put| B{Memory Check}
+    OP -->|Get / Unlock / Erase| PROCESS[Process Normally]
+    
+    B -->|RAM >= 33%| C["Return NO - Memory Overloaded"]
+    B -->|RAM < 33%| D{Request: Lock or Put?}
+    
+    D -->|Lock| LOCK["Acquire Lock - Store ID, Expire"]
+    LOCK --> N[Return Done]
+    D -->|Put| PUT[Store Data]
+    PUT --> N
+>>>>>>> origin/main
     
     SIZE -->|> 16KB + anonymous| E[Reject BadPayload]
     SIZE -->|> 16KB + auth| F{Size > Auth MaxSize?}
@@ -621,6 +637,7 @@ JackrabbitDLM/
 │   │   └── locker.py          # Locker class
 │   ├── server/                 # Server daemon
 │   │   ├── __init__.py
+<<<<<<< HEAD
 │   │   ├── daemon.py          # Main server (select.poll event loop)
 │   │   └── backends/          # Pluggable storage backends
 │   │       ├── __init__.py
@@ -630,6 +647,9 @@ JackrabbitDLM/
 │   │       ├── redis.py       # Redis backend (pip install redis)
 │   │       ├── sqlite.py      # SQLite backend
 │   │       └── filesystem.py  # Filesystem backend
+=======
+│   │   └── daemon.py          # Main server (select.poll event loop)
+>>>>>>> origin/main
 │   ├── tools/                  # Utilities
 │   │   ├── identity/          # Auth config generator
 │   │   │   ├── __init__.py
