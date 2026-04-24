@@ -621,7 +621,15 @@ JackrabbitDLM/
 │   │   └── locker.py          # Locker class
 │   ├── server/                 # Server daemon
 │   │   ├── __init__.py
-│   │   └── daemon.py          # Main server (select.poll event loop)
+│   │   ├── daemon.py          # Main server (select.poll event loop)
+│   │   └── backends/          # Pluggable storage backends
+│   │       ├── __init__.py
+│   │       ├── base.py        # LockBackend abstract interface
+│   │       ├── registry.py    # Backend registry and factory
+│   │       ├── memory.py      # In-memory backend (default)
+│   │       ├── redis.py       # Redis backend (pip install redis)
+│   │       ├── sqlite.py      # SQLite backend
+│   │       └── filesystem.py  # Filesystem backend
 │   ├── tools/                  # Utilities
 │   │   ├── identity/          # Auth config generator
 │   │   │   ├── __init__.py

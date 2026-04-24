@@ -20,3 +20,21 @@
 
 # Maximum DataStore size for anonymous requests in bytes
 # max_datastore_size: 16384   # 16 KB
+
+# ── Backend Configuration ─────────────────────────────────────────────
+# Storage backend selection. Options: memory, redis, sqlite, filesystem
+# backend: memory
+
+# Backend-specific configuration (only needed for non-memory backends)
+# backends:
+#   redis:
+#     host: localhost
+#     port: 6379
+#     db: 0
+#     key_prefix: dlm:
+#     ttl_default: 300
+#   sqlite:
+#     db_path: /home/JackrabbitDLM/locks.db
+#   filesystem:
+#     base_dir: /home/JackrabbitDLM/backend_locks
+#     file_ext: .lock

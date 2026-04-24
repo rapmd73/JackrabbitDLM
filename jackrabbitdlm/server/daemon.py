@@ -49,6 +49,7 @@ import select
 import json
 
 from ..common.encoding import dlmEncode, dlmDecode, ShuffleJSON
+from .backends.registry import BackendRegistry
 
 # ── Version & Configuration ────────────────────────────────────────────
 
@@ -539,12 +540,25 @@ def _handle_erase(data_db, filename):
 
 # ── Main Server Loop ───────────────────────────────────────────────────
 
+def _load_config():
+    """Load configuration from YAML file if present."""
+    config_path = os.path.join(CONFIG_DIR, "defaults.yaml")
+    if os.path.exists(config_path):
+        try:
+            import yaml
+            with open(config_path, 'r') as f:
+                return yaml.safe_load(f)
+        except Exception:
+            pass
+    return {}
+
 def main():
     """
     Main server entry point.
     
     Creates the TCP server, handles connections with non-blocking I/O,
     processes requests, manages lock expiration, and logs statistics.
+    Optionally uses a pluggable storage backend (Redis, SQLite, Filesystem).
     """
     global Statistics, Locker, _max_data_hold_size
 
@@ -559,6 +573,22 @@ def main():
         host = sys.argv[1]
     if len(sys.argv) > 2:
         port = int(sys.argv[2])
+
+    # Load configuration and optionally configure storage backend
+    config = _load_config()
+    backend_name = config.get('backend', 'memory')
+    if backend_name != 'memory':
+        BackendRegistry.configure({
+            'default': backend_name,
+            'backends': config.get('backends', {})
+        })
+        _write_log(f"Using {backend_name} storage backend")
+        try:
+            backend = BackendRegistry.get()
+            _write_log(f"Backend connected: {backend.name}")
+        except Exception as e:
+            _write_log(f"Backend connection failed: {e}, falling back to memory")
+            backend_name = 'memory'
 
     _write_log(f"Jackrabbit DLM {VERSION}")
     _reload_disk_memory()
