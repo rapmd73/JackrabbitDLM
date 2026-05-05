@@ -536,6 +536,29 @@ def ProcessPayload(addr,data):
         # absolute for keeping the lock from being hijacked.
         Statistics['NotOwner']=Statistics.get('NotOwner',0)+1
         return jsonStatus("NotOwner")
+    # Unlock request
+    elif action=='testlock':
+        # Just pass through unlock
+        if FileName not in Locker:
+            Statistics['TestLockNF']=Statistics.get('TestLockNF',0)+1
+            return jsonStatus("Unlocked")
+
+        # Verify owner and unlock
+        if Locker[FileName]['ID']==dataDB['ID']:
+            Statistics['TestLock']=Statistics.get('TestLock',0)+1
+            if  time.time()<=Locker[FileName]['Expire']:
+                if not CheckIdentity(dataDB,Locker[FileName]):
+                    # Lock access by a non-owner ID
+                    Statistics['NotOwner']=Statistics.get('NotOwner',0)+1
+                    return jsonStatus("NotOwner")
+                return jsonStatus("Locked",Locker[FileName]['ID'])
+            else:
+                return jsonStatus("Unlocked")
+
+        # Unock access by a non-owner ID. This may seem idiotic, but its an
+        # absolute for keeping the lock from being hijacked.
+        Statistics['NotOwner']=Statistics.get('NotOwner',0)+1
+        return jsonStatus("NotOwner")
     # Get memory reference
     elif action=='get':
         # Memory item doesn't exist

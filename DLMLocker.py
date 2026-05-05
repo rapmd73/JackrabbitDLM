@@ -229,11 +229,17 @@ class Locker:
     def Lock(self,expire=300):
         return self.Retry("Lock",expire,casefold=True)
 
-    # Check if the item is locked. Will aquire if not. Single pass, no loop
+    # Check if the item is locked. Will aquire if not. Single pass, no loop The
+    # acquire flag is a way to use a TEST ONLY approach that does NOT acquire the
+    # lock.
 
-    def IsLocked(self,expire=300):
-        payload={ "ID":self.ID, "FileName":self.filename, "Action":"Lock",
-                  "Expire":str(expire) }
+    def IsLocked(self,expire=300,acquire=True):
+        if acquire:
+            payload={ "ID":self.ID, "FileName":self.filename, "Action":"Lock",
+                      "Expire":str(expire) }
+        else:
+            payload={ "ID":self.ID, "FileName":self.filename, "Action":"TestLock",
+                      "Expire":str(expire) }
 
         if self.name or self.identity:
             payload['Name']=self.name
