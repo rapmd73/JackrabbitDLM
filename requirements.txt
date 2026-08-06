@@ -1,1 +1,3 @@
-psutil
+# Jackrabbit DLM Dependencies
+psutil>=5.9.0
+plotly>=5.18.0
