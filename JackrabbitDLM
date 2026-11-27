@@ -496,6 +496,8 @@ def ProcessPayload(addr,data):
             if 'Name' in dataDB:    # Add the authentication
                 Locker[FileName]['Name']=dataDB['Name']
                 Locker[FileName]['Identity']=dataDB['Identity']
+            if 'AllowExtention' in dataDB:
+                Locker[FileName]['AllowExtention']=dataDB['AllowExtention']
             Statistics['Lock']=Statistics.get('Lock',0)+1
             return jsonStatus("Locked",Locker[FileName]['ID'])
 
@@ -512,6 +514,10 @@ def ProcessPayload(addr,data):
 
         # Lock access by a non-owner ID
         Statistics['NotOwner']=Statistics.get('NotOwner',0)+1
+        # If contention defense is allowed, add 1 second.  This allows competing
+        # consumers to protect original owner under certain conditions.
+        if 'AllowExtention' in Locker[FileName]:
+            Locker[FileName]['Expire']+=1
         return jsonStatus("NotOwner")
     # Unlock request
     elif action=='unlock':

@@ -27,8 +27,8 @@ import secrets
 
 class Locker:
     # Initialize the file name
-    def __init__(self, filename, Retry=7, RetrySleep=1, Timeout=300, ID=None, Host='', Port=37373, Encoder=None, Decoder=None, name=None, identity=None):
-        self.VERSION="0.0.0.1.580"
+    def __init__(self, filename, Retry=7, RetrySleep=1, Timeout=300, ID=None, Host='', Port=37373, Encoder=None, Decoder=None, name=None, identity=None, AllowExtention=False):
+        self.VERSION="0.0.0.1.600"
         self.ulResp=['badpayload','locked','unlocked','notowner','notfound','version','no']
 
         # Encoding String
@@ -53,6 +53,7 @@ class Locker:
         self.retryLimit=Retry
         self.retrysleep=RetrySleep
         self.timeout=Timeout
+        self.AllowExtention=AllowExtention
         self.port=Port
         self.host=Host
         if self.host=='':
@@ -161,6 +162,8 @@ class Locker:
     def Retry(self,action,expire,casefold=True):
         payload={ "ID":self.ID, "FileName":self.filename, "Action":action,
                   "Expire":str(expire) }
+        if self.AllowExtention:
+            payload['AllowExtention']="True"
 
         if self.name or self.identity:
             payload['Name']=self.name
@@ -234,12 +237,11 @@ class Locker:
     # lock.
 
     def IsLocked(self,expire=300,acquire=True):
+        payload={ "ID":self.ID, "FileName":self.filename,"Expire":str(expire) }
         if acquire:
-            payload={ "ID":self.ID, "FileName":self.filename, "Action":"Lock",
-                      "Expire":str(expire) }
+            payload["Action"]="Lock"
         else:
-            payload={ "ID":self.ID, "FileName":self.filename, "Action":"TestLock",
-                      "Expire":str(expire) }
+            payload["Action"]="TestLock"
 
         if self.name or self.identity:
             payload['Name']=self.name
